@@ -1,5 +1,5 @@
 // src/components/flights/FlightCard.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { Flight } from '../../types/flight';
 import { formatTime, formatDate, getDurationFromMinutes } from '../../utils/date';
 import { formatCurrency } from '../../utils/format';
@@ -7,18 +7,50 @@ import { Card, CardContent } from '../ui/Card';
 import Button from '../ui/Button';
 import { motion } from 'framer-motion';
 
+// Import optional components - add these if you've implemented them
+import PriceTrend from './PriceTrend';
+import SeatsIndicator from './SeatsIndicator';
+import FlightDetailsModal from './FlightDetailsModal';
+
 interface FlightCardProps {
     flight: Flight;
     onSelect: (flight: Flight) => void;
+    searchCount?: number;
 }
 
-const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect }) => {
+const FlightCard: React.FC<FlightCardProps> = ({
+    flight,
+    onSelect,
+    searchCount = 0
+}) => {
+    const [showDetails, setShowDetails] = useState<boolean>(false);
+
+    // Ensure we have proper date objects or strings for formatting
+    const departureTime = typeof flight.departureTime === 'string'
+        ? new Date(flight.departureTime)
+        : flight.departureTime;
+
+    const arrivalTime = typeof flight.arrivalTime === 'string'
+        ? new Date(flight.arrivalTime)
+        : flight.arrivalTime;
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
         >
+
+            {showDetails && (
+                <FlightDetailsModal
+                    isOpen={showDetails}
+                    onClose={() => setShowDetails(false)}
+                    flight={flight}
+                    onSelect={onSelect}
+                />
+            )}
+
+
             <Card className="overflow-hidden hover:shadow-md transition-shadow duration-300">
                 <CardContent className="p-0">
                     <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-700">
@@ -37,7 +69,7 @@ const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect }) => {
                             <div className="flex items-center">
                                 <div className="text-center">
                                     <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                        {formatTime(flight.departureTime)}
+                                        {formatTime(departureTime)}
                                     </div>
                                     <div className="text-sm text-gray-500 dark:text-gray-400">
                                         {flight.departureCode}
@@ -57,7 +89,7 @@ const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect }) => {
 
                                 <div className="text-center">
                                     <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                        {formatTime(flight.arrivalTime)}
+                                        {formatTime(arrivalTime)}
                                     </div>
                                     <div className="text-sm text-gray-500 dark:text-gray-400">
                                         {flight.arrivalCode}
@@ -72,6 +104,34 @@ const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect }) => {
                                 <div className="text-sm text-gray-500 dark:text-gray-400">
                                     per passenger
                                 </div>
+
+                                {/* Price increase indicator */}
+                                {flight.priceIncreased && (
+                                    <div className="mt-1 text-xs text-red-600 dark:text-red-400 flex items-center">
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            className="mr-1 h-3 w-3"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                                            />
+                                        </svg>
+                                        Price increased by 10%
+                                    </div>
+                                )}
+
+
+                                <PriceTrend
+                                    searchCount={searchCount}
+                                    isIncreased={flight.priceIncreased || false}
+                                />
+
                             </div>
                         </div>
 
@@ -81,17 +141,38 @@ const FlightCard: React.FC<FlightCardProps> = ({ flight, onSelect }) => {
                                     {flight.departureCity} to {flight.arrivalCity}
                                 </div>
                                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                                    {formatDate(flight.departureTime)} • {flight.aircraft}
+                                    {formatDate(departureTime)} • {flight.aircraft}
                                 </div>
+
+                                <SeatsIndicator seatsAvailable={flight.seatsAvailable} />
+
+
+                                {/* Basic seats indicator */}
+                                {flight.seatsAvailable < 10 && (
+                                    <div className="mt-1 text-xs text-red-600 dark:text-red-400">
+                                        Only {flight.seatsAvailable} seats left!
+                                    </div>
+                                )}
                             </div>
 
-                            <Button
-                                onClick={() => onSelect(flight)}
-                                variant="primary"
-                                size="md"
-                            >
-                                Select Flight
-                            </Button>
+                            <div className="flex space-x-2">
+                                <Button
+                                    onClick={() => setShowDetails(true)}
+                                    variant="outline"
+                                    size="md"
+                                >
+                                    View Details
+                                </Button>
+
+
+                                <Button
+                                    onClick={() => onSelect(flight)}
+                                    variant="primary"
+                                    size="md"
+                                >
+                                    Select Flight
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </CardContent>

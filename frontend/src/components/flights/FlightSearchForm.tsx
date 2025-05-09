@@ -1,4 +1,4 @@
-// src/components/flights/FlightSearchForm.tsx
+// frontend/src/components/flights/FlightSearchForm.tsx
 import React from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,6 +26,7 @@ const FlightSearchForm: React.FC<FlightSearchFormProps> = ({
         handleSubmit,
         formState: { errors },
         setValue,
+        trigger,
     } = useForm<FlightSearchFormValues>({
         resolver: zodResolver(flightSearchSchema),
         defaultValues: {
@@ -37,16 +38,25 @@ const FlightSearchForm: React.FC<FlightSearchFormProps> = ({
     });
 
     const handleDepartureCityChange = (value: string, code: string) => {
-        setValue('departureCity', value);
+        console.log("Setting departureCity to:", value);
+        setValue('departureCity', value, { shouldValidate: true });
+        trigger('departureCity');
     };
 
     const handleArrivalCityChange = (value: string, code: string) => {
-        setValue('arrivalCity', value);
+        console.log("Setting arrivalCity to:", value);
+        setValue('arrivalCity', value, { shouldValidate: true });
+        trigger('arrivalCity');
+    };
+
+    const handleFormSubmit = (data: FlightSearchFormValues) => {
+        console.log("Form submitted with data:", data);
+        onSubmit(data);
     };
 
     return (
         <form
-            onSubmit={handleSubmit(onSubmit)}
+            onSubmit={handleSubmit(handleFormSubmit)}
             className="bg-white p-6 rounded-lg shadow-sm dark:bg-gray-800"
         >
             <div className="grid grid-cols-1 gap-6 md:grid-cols-4">

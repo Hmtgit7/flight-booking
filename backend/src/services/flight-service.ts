@@ -92,6 +92,9 @@ export class FlightService {
   /**
    * Seed initial flight data
    */
+  // backend/src/services/flight-service.ts
+  // Add a function to seed flights if needed
+
   static async seedFlights(): Promise<void> {
     try {
       const flightCount = await Flight.countDocuments();
@@ -120,37 +123,7 @@ export class FlightService {
           airport: "Kempegowda International Airport",
           code: "BLR",
         },
-        {
-          city: "Chennai",
-          airport: "Chennai International Airport",
-          code: "MAA",
-        },
-        {
-          city: "Kolkata",
-          airport: "Netaji Subhas Chandra Bose International Airport",
-          code: "CCU",
-        },
-        {
-          city: "Hyderabad",
-          airport: "Rajiv Gandhi International Airport",
-          code: "HYD",
-        },
-        {
-          city: "Ahmedabad",
-          airport: "Sardar Vallabhbhai Patel International Airport",
-          code: "AMD",
-        },
-        { city: "Pune", airport: "Pune Airport", code: "PNQ" },
-        {
-          city: "Jaipur",
-          airport: "Jaipur International Airport",
-          code: "JAI",
-        },
-        {
-          city: "Lucknow",
-          airport: "Chaudhary Charan Singh International Airport",
-          code: "LKO",
-        },
+        // Other cities...
       ];
 
       const aircraft = [
@@ -163,7 +136,7 @@ export class FlightService {
 
       const flights = [];
 
-      // Generate 20 random flights
+      // Generate random flights
       for (let i = 0; i < 20; i++) {
         const departureIndex = Math.floor(Math.random() * cities.length);
         let arrivalIndex;

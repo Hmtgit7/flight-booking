@@ -1,4 +1,5 @@
 // src/types/flight.ts
+// src/types/flight.ts (add priceIncreased property)
 export interface Flight {
   _id: string;
   flightNumber: string;
@@ -16,6 +17,7 @@ export interface Flight {
   currentPrice: number;
   seatsAvailable: number;
   aircraft: string;
+  priceIncreased?: boolean; 
 }
 
 export interface FlightSearchCriteria {

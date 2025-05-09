@@ -1,21 +1,31 @@
-// src/utils/date.ts
-// Date formatting and manipulation utilities
-import {
-  format,
-  addDays,
-  differenceInMinutes,
-} from "date-fns";
+// frontend/src/utils/date.ts
+import { format, addDays, differenceInMinutes } from "date-fns";
 
 export const formatDate = (date: Date | string): string => {
-  return format(new Date(date), "MMM dd, yyyy");
+  try {
+    return format(new Date(date), "MMM dd, yyyy");
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return "Invalid date";
+  }
 };
 
 export const formatTime = (date: Date | string): string => {
-  return format(new Date(date), "hh:mm a");
+  try {
+    return format(new Date(date), "hh:mm a");
+  } catch (error) {
+    console.error("Error formatting time:", error);
+    return "Invalid time";
+  }
 };
 
 export const formatDateTime = (date: Date | string): string => {
-  return format(new Date(date), "MMM dd, yyyy hh:mm a");
+  try {
+    return format(new Date(date), "MMM dd, yyyy hh:mm a");
+  } catch (error) {
+    console.error("Error formatting date time:", error);
+    return "Invalid date/time";
+  }
 };
 
 export const getNextNDays = (n: number): Date[] => {
@@ -33,14 +43,19 @@ export const getDurationString = (
   departureTime: Date | string,
   arrivalTime: Date | string
 ): string => {
-  const deptTime = new Date(departureTime);
-  const arrTime = new Date(arrivalTime);
+  try {
+    const deptTime = new Date(departureTime);
+    const arrTime = new Date(arrivalTime);
 
-  const minutes = differenceInMinutes(arrTime, deptTime);
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
+    const minutes = differenceInMinutes(arrTime, deptTime);
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
 
-  return `${hours}h ${remainingMinutes}m`;
+    return `${hours}h ${remainingMinutes}m`;
+  } catch (error) {
+    console.error("Error calculating duration:", error);
+    return "Invalid duration";
+  }
 };
 
 export const getDurationFromMinutes = (minutes: number): string => {

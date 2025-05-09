@@ -1,4 +1,4 @@
-// src/components/flights/AirportSearch.tsx
+// frontend/src/components/flights/AirportSearch.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { airportService } from '../../services/airport-service';
 import { Airport } from '../../types/flight';
@@ -43,7 +43,9 @@ const AirportSearch: React.FC<AirportSearchProps> = ({
 
             setLoading(true);
             try {
+                console.log("Searching airports with query:", query);
                 const airports = await airportService.searchAirports(query);
+                console.log("Search results:", airports);
                 setResults(airports);
             } catch (error) {
                 console.error('Error searching airports:', error);
@@ -83,8 +85,9 @@ const AirportSearch: React.FC<AirportSearchProps> = ({
     };
 
     const handleSelectAirport = (airport: Airport) => {
-        setQuery(`${airport.city} (${airport.code})`);
-        onChange(`${airport.city} (${airport.code})`, airport.code);
+        const displayValue = `${airport.city} (${airport.code})`;
+        setQuery(displayValue);
+        onChange(displayValue, airport.code);
         setShowResults(false);
     };
 
@@ -141,7 +144,7 @@ const AirportSearch: React.FC<AirportSearchProps> = ({
             {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
 
             <AnimatePresence>
-                {showResults && results.length > 0 && (
+                {showResults && query.trim().length >= 2 && (
                     <motion.div
                         ref={resultsRef}
                         className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg dark:bg-gray-800"
@@ -151,20 +154,26 @@ const AirportSearch: React.FC<AirportSearchProps> = ({
                         transition={{ duration: 0.2 }}
                     >
                         <ul className="max-h-60 overflow-auto rounded-md py-1 text-base">
-                            {results.map((airport) => (
-                                <li
-                                    key={airport.code}
-                                    className="cursor-pointer px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                    onClick={() => handleSelectAirport(airport)}
-                                >
-                                    <div className="font-medium">
-                                        {airport.city} ({airport.code})
-                                    </div>
-                                    <div className="text-sm text-gray-500 dark:text-gray-400">
-                                        {airport.name}, {airport.country}
-                                    </div>
+                            {results.length > 0 ? (
+                                results.map((airport, index) => (
+                                    <li
+                                        key={`${airport.code}-${index}`} // Add index to make keys unique
+                                        className="cursor-pointer px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        onClick={() => handleSelectAirport(airport)}
+                                    >
+                                        <div className="font-medium">
+                                            {airport.city} ({airport.code})
+                                        </div>
+                                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                                            {airport.name}, {airport.country}
+                                        </div>
+                                    </li>
+                                ))
+                            ) : (
+                                <li className="px-4 py-2 text-gray-500 dark:text-gray-400">
+                                    No results found. Try a different search term.
                                 </li>
-                            ))}
+                            )}
                         </ul>
                     </motion.div>
                 )}
