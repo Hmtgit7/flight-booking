@@ -3,7 +3,7 @@ import axios, { AxiosError } from "axios";
 import { getToken } from "../utils/storage";
 
 // Use environment variable or default to localhost
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.REACT_APP_API_URL;
 
 console.log("API URL configured as:", API_URL);
 
