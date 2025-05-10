@@ -1,21 +1,56 @@
 # SkyBooker Frontend
 
-This is the frontend of the SkyBooker flight booking application, built with React, TypeScript, and Tailwind CSS.
-
-## Live Demo
-
-[View Live Demo](https://flight-booking-ruby.vercel.app/)
+This is the frontend application for SkyBooker, a flight booking platform built with React, TypeScript, and Tailwind CSS.
 
 ## Features
 
-- Responsive, mobile-friendly design
-- Light and dark mode
-- Real-time flight search and filtering
-- Airport and city autocomplete search using Aviation Edge API
+- Responsive design with mobile-first approach
+- Light and dark mode support
+- Real-time flight search with filters
+- Airport and city autocomplete search
 - Interactive booking process
-- Booking history and management
 - PDF ticket generation
+- Booking history and management
+- Wallet integration
 - Dynamic pricing simulation
+
+## Technology Stack
+
+- **React**: Library for building user interfaces
+- **TypeScript**: Static typing for JavaScript
+- **Tailwind CSS**: Utility-first CSS framework
+- **React Router**: For navigation and routing
+- **React Hook Form**: Form state management and validation
+- **Zod**: Schema validation library
+- **Axios**: For API requests
+- **Framer Motion**: For animations and transitions
+- **PDF-lib**: For PDF generation
+- **date-fns**: Date manipulation library
+
+## Project Structure
+
+```
+src/
+├── components/           # Reusable UI components
+│   ├── auth/             # Authentication components
+│   ├── bookings/         # Booking-related components
+│   ├── flights/          # Flight-related components
+│   ├── layout/           # Layout components
+│   └── ui/               # UI components (buttons, cards, etc.)
+├── context/              # React context providers
+├── pages/                # Page components
+├── services/             # API service functions
+├── types/                # TypeScript type definitions
+├── utils/                # Utility functions
+│   ├── date.ts           # Date formatting utilities
+│   ├── format.ts         # Data formatting utilities
+│   ├── storage.ts        # Local storage utilities
+│   ├── validation.ts     # Form validation schemas
+│   └── dev-utils.ts      # Development utilities
+├── App.tsx               # Main application component
+├── index.tsx             # Application entry point
+└── routes.tsx            # Route definitions
+```
 
 ## Getting Started
 
@@ -32,12 +67,14 @@ This is the frontend of the SkyBooker flight booking application, built with Rea
 npm install
 ```
 
-2. Create a `.env` file:
+2. Set up environment variables:
 
-```bash
+Create a `.env` file in the root directory with the following variables:
+
+```
 REACT_APP_API_URL=http://localhost:5000/api
-REACT_APP_AIRPORT_API_URL=https://aviation-edge.com/v2/public/autocomplete
-REACT_APP_AVIATION_API_KEY=your_aviation_edge_api_key
+REACT_APP_AMADEUS_API_KEY=your_amadeus_api_key
+REACT_APP_AMADEUS_API_SECRET=your_amadeus_api_secret
 ```
 
 3. Start the development server:
@@ -48,7 +85,86 @@ npm start
 
 The app will be available at http://localhost:3000.
 
-### Building for Production
+## Key Components
+
+### Flight Search
+
+- `FlightSearchForm`: Form for searching flights with airport autocomplete
+- `AirportSearch`: Autocomplete component for airport/city search
+- `FlightList`: Display search results with filtering and sorting
+- `FlightCard`: Card component to display flight information
+- `FlightFilters`: Filter component for search results
+
+### Booking Process
+
+- `BookingForm`: Form for passenger details and booking confirmation
+- `BookingConfirmation`: Displays booking confirmation details
+- `TicketGenerator`: Generates and displays ticket information
+- `BookingHistory`: Displays all user bookings
+
+### Authentication
+
+- `LoginForm`: User login form
+- `RegisterForm`: User registration form
+- `AuthContext`: Context provider for authentication state
+
+## Development Utilities
+
+The frontend includes development utilities to help with testing and debugging:
+
+```javascript
+// Create a test booking
+window.skyBookerUtils.createTestBooking();
+
+// Create multiple test bookings
+window.skyBookerUtils.createTestBookings(3);
+
+// View all data in localStorage
+window.skyBookerUtils.printAllStorage();
+
+// Reset all bookings
+window.skyBookerUtils.resetAllBookings();
+
+// Reset search counts (for dynamic pricing testing)
+window.skyBookerUtils.resetSearchCounts();
+
+// Generate a report of all bookings
+window.skyBookerUtils.generateBookingsReport();
+```
+
+## Dynamic Pricing Algorithm
+
+The frontend implements a dynamic pricing algorithm:
+
+1. Each time a user searches for a specific flight route, the search is tracked in localStorage
+2. If the same route is searched 3+ times within 5 minutes, the price increases by 10%
+3. A visual indicator is shown when the price has increased
+4. After 10 minutes of inactivity, the price resets to the original amount
+
+To test this feature:
+
+- Search for a specific route (e.g., Mumbai to Delhi) 3 times within 5 minutes
+- Observe the price increase and visual indicator
+- Wait 10+ minutes and search again to see the price reset
+
+## Local Storage
+
+The frontend uses localStorage for:
+
+- Storing JWT token
+- Tracking search history for dynamic pricing
+- Storing mock bookings when working offline
+- Saving theme preference (light/dark mode)
+
+## Mock Data and Failsafes
+
+The frontend includes comprehensive fallback mechanisms:
+
+- If the Amadeus API is unavailable, the app falls back to mock airport and flight data
+- All frontend features work offline using localStorage for persistent data
+- Visual indicators show when using mock vs. real API data
+
+## Building for Production
 
 ```bash
 npm run build
@@ -56,101 +172,21 @@ npm run build
 
 This will create a `build` folder with optimized production files.
 
-## Project Structure
-
-```
-flight-booking/
-├── public/              # Static files
-├── src/
-│   ├── components/      # React components
-│   │   ├── ui/          # Reusable UI components
-│   │   ├── layout/      # Layout components
-│   │   ├── flights/     # Flight-related components
-│   │   ├── bookings/    # Booking-related components
-│   │   └── auth/        # Authentication components
-│   ├── context/         # React context providers
-│   ├── hooks/           # Custom React hooks
-│   ├── pages/           # Page components
-│   ├── services/        # API service functions
-│   ├── types/           # TypeScript types
-│   ├── utils/           # Utility functions
-│   ├── styles/          # CSS and Tailwind styles
-│   ├── App.tsx          # Main App component
-│   ├── index.tsx        # Entry point
-│   └── routes.tsx       # Route definitions
-├── package.json
-├── tailwind.config.js
-├── Dockerfile           # Docker configuration
-└── tsconfig.json
-```
-
-## Available Scripts
-
-- `npm start` - Start development server
-- `npm run build` - Build for production
-- `npm test` - Run tests
-- `npm run eject` - Eject from create-react-app
-
-## Technologies
-
-- React 18 with TypeScript
-- React Router for navigation
-- Tailwind CSS for styling
-- Framer Motion for animations
-- React Hook Form for form handling
-- Zod for validation
-- Axios for API requests
-- PDF-lib for PDF generation
-
-## API Integration
-
-The frontend integrates with:
-
-1. Backend API for:
-
-   - User authentication
-   - Flight search and data
-   - Booking management
-   - Wallet operations
-   - PDF ticket generation
-
-2. Aviation Edge API for:
-   - Airport and city autocomplete search
-   - Real-time flight data
-
-## Local Storage
-
-The application uses local storage for:
-
-- JWT token persistence (via TOKEN_KEY)
-- Theme preference (light/dark mode)
-- Temporary user preferences during the session
-
-## Docker
-
-To build and run the frontend using Docker:
-
-```bash
-# Build the Docker image
-docker build -t skybooker-frontend .
-
-# Run the container
-docker run -p 3000:80 skybooker-frontend
-```
-
 ## Deployment
 
-This project is deployed on Vercel. The deployment process is automatic via GitHub integration.
+The frontend is deployed on Vercel. The deployment is automatically triggered by pushing to the main branch of the GitHub repository.
 
-To deploy a new version:
+To deploy manually:
 
-1. Push changes to the main branch
-2. Vercel will automatically build and deploy the updated application
+```bash
+npm run build
+vercel --prod
+```
 
-## Environment Variables on Vercel
+## Testing
 
-Make sure to set these environment variables in your Vercel project settings:
+```bash
+npm test
+```
 
-- `REACT_APP_API_URL`
-- `REACT_APP_AIRPORT_API_URL`
-- `REACT_APP_AVIATION_API_KEY`
+This will run the test suite using Jest and React Testing Library.
