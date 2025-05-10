@@ -7,9 +7,6 @@ import { BookingProvider } from './context/BookingContext';
 import AppRoutes from './routes';
 import './styles/tailwind.css';
 
-// Import dev utilities in development mode
-import './utils/dev-utils';
-
 const App: React.FC = () => {
   // Log environment info
   useEffect(() => {
