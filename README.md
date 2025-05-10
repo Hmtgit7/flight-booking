@@ -10,7 +10,7 @@ SkyBooker is a full-stack web application for booking flights. It features a res
 
 - User authentication (register, login, profile management)
 - Real-time flight search with filters (price, airline, departure time)
-- Airport and city autocomplete search API integration
+- Airport and city autocomplete search using Amadeus API
 - Dynamic pricing (price increases by 10% after 3 searches within 5 minutes, resets after 10 minutes)
 - Booking system with passenger management
 - Wallet system with a default balance of ₹50,000
@@ -25,19 +25,23 @@ SkyBooker is a full-stack web application for booking flights. It features a res
 - **Authentication**: JWT
 - **State Management**: React Context
 - **Form Handling**: React Hook Form, Zod
-- **PDF Generation**: React-PDF/PDF-lib
+- **PDF Generation**: PDF-lib
+- **APIs**: Amadeus for airport search and flight offers
 - **Deployment**: Frontend on Vercel, Backend on Render
 
-## Repository
+## API Integration
 
-[GitHub Repository](https://github.com/Hmtgit7/flight-booking)
+SkyBooker integrates with two main APIs:
 
-## Project Structure
+1. **Amadeus Travel API**: Used for:
 
-The project consists of two main parts:
+   - Airport and city search autocomplete
+   - Flight search with real-time availability
 
-- `flight-booking/` - Frontend application (React with TypeScript)
-- `backend/` - Backend API (Node.js, Express, MongoDB)
+2. **Custom Backend API**: Used for:
+   - User authentication
+   - Booking management
+   - Wallet operations
 
 ## Getting Started
 
@@ -46,6 +50,7 @@ The project consists of two main parts:
 - Node.js (v16+)
 - npm or yarn
 - MongoDB (local or cloud instance)
+- Amadeus API credentials
 
 ### Installation
 
@@ -68,33 +73,23 @@ npm run dev
 3. Set up the frontend:
 
 ```bash
-cd ../flight-booking
+cd ../frontend
 npm install
 cp .env.example .env  # Then edit .env with your configuration
 npm start
 ```
 
-### Using Docker
+### Environment Variables
 
-You can run the application using Docker:
-
-```bash
-docker-compose up -d
-```
-
-This will start the frontend, backend, and MongoDB in separate containers.
-
-## Environment Variables
-
-### Frontend (.env)
+#### Frontend (.env)
 
 ```
 REACT_APP_API_URL=http://localhost:5000/api  # URL of the backend API
-REACT_APP_AIRPORT_API_URL=https://aviation-edge.com/v2/public/autocomplete  # Airport API URL
-REACT_APP_AVIATION_API_KEY=your_aviation_edge_api_key  # Aviation Edge API key
+REACT_APP_AMADEUS_API_KEY=your_amadeus_api_key
+REACT_APP_AMADEUS_API_SECRET=your_amadeus_api_secret
 ```
 
-### Backend (.env)
+#### Backend (.env)
 
 ```
 PORT=5000
@@ -102,6 +97,23 @@ MONGODB_URI=mongodb://localhost:27017/flight-booking
 JWT_SECRET=your-secret-key-change-in-production
 NODE_ENV=development
 ```
+
+## Dynamic Pricing Algorithm
+
+The application implements a dynamic pricing algorithm that:
+
+1. Tracks searches for specific flight routes
+2. Increases prices by 10% if the same route is searched 3+ times within 5 minutes
+3. Resets prices to baseline after 10 minutes of inactivity
+4. Displays visual indicators when prices have increased
+
+## Mock Data & Failsafe Mechanisms
+
+SkyBooker includes comprehensive fallback mechanisms:
+
+- When Amadeus API is unavailable, the app falls back to mock airport and flight data
+- All frontend features work offline with localStorage for persistent booking data
+- Visual indicators are shown when using mock data vs. real API data
 
 ## Deployment
 
@@ -111,11 +123,65 @@ The application is deployed using:
 - Backend: Render (using Docker)
 - Database: MongoDB Atlas
 
+## Project Structure
+
+```
+flight-booking/
+├── backend/               # Node.js & Express backend
+│   ├── src/
+│   │   ├── config/        # Configuration files
+│   │   ├── controllers/   # Request handlers
+│   │   ├── middleware/    # Express middleware
+│   │   ├── models/        # MongoDB models
+│   │   ├── routes/        # API routes
+│   │   ├── services/      # Business logic
+│   │   ├── app.ts         # Express app setup
+│   │   └── server.ts      # Server entry point
+│   └── ...
+├── frontend/              # React frontend
+│   ├── src/
+│   │   ├── components/    # React components
+│   │   ├── context/       # React context providers
+│   │   ├── pages/         # Page components
+│   │   ├── services/      # API service functions
+│   │   ├── types/         # TypeScript type definitions
+│   │   ├── utils/         # Utility functions
+│   │   └── ...
+│   └── ...
+└── ...
+```
+
+## Key Features in Detail
+
+### Airport Search
+
+- Real-time search with Amadeus API integration
+- City and airport code matching
+- Caching for performance optimization
+
+### Flight Search
+
+- Comprehensive filters (price, airline, time)
+- Dynamic pricing display
+- Seat availability indicators
+
+### Booking Process
+
+- Multi-passenger booking support
+- Wallet integration for payment
+- PDF ticket generation
+
+### User Account
+
+- Secure authentication
+- Booking history with detailed view
+- Wallet transaction history
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
 
 ## Acknowledgements
 
-- Airport and City Search API from [Aviation Edge](https://aviation-edge.com/)
-- Inspiration from [MakeMyTrip](https://www.makemytrip.com/) for UI reference
+- Amadeus for Travel API
+- Inspiration from MakeMyTrip for UI reference

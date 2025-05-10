@@ -159,7 +159,8 @@ export const pdfService = {
       }
     );
 
-    page.drawText(`Total Amount: ₹${ticket.totalAmount.toFixed(2)}`, {
+    // Fix: Use "INR" instead of "₹" symbol which can't be encoded by WinAnsi
+    page.drawText(`Total Amount: INR ${ticket.totalAmount.toFixed(2)}`, {
       x: margin,
       y: 450,
       size: 12,

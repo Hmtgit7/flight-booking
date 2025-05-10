@@ -2,7 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { bookingService } from '../../services/booking-service';
+import { flightService } from '../../services/flight-service';
 import { Booking } from '../../types/booking';
+import { Flight } from '../../types/flight';
 import { formatDate, formatTime } from '../../utils/date';
 import { formatCurrency } from '../../utils/format';
 import Button from '../ui/Button';
@@ -12,12 +14,37 @@ import Loader from '../ui/Loader';
 const BookingHistory: React.FC = () => {
     const [bookings, setBookings] = useState<Booking[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
+    const [flightDetails, setFlightDetails] = useState<Record<string, Flight>>({});
 
     useEffect(() => {
         const fetchBookings = async () => {
             try {
+                // Fetch bookings
                 const bookingData = await bookingService.getUserBookings();
+                console.log("Fetched bookings:", bookingData);
                 setBookings(bookingData);
+
+                // Fetch flight details for each booking
+                const flightDetailsMap: Record<string, Flight> = {};
+
+                for (const booking of bookingData) {
+                    // Handle cases where flight is already populated or just an ID
+                    const flightId = typeof booking.flight === 'string' ? booking.flight : (booking.flight as Flight)._id;
+
+                    try {
+                        // Only fetch if we don't already have details
+                        if (!flightDetailsMap[flightId]) {
+                            const flightDetail = await flightService.getFlightById(flightId);
+                            flightDetailsMap[flightId] = flightDetail;
+                        }
+                    } catch (err) {
+                        console.error(`Error fetching flight details for ID ${flightId}:`, err);
+                        // Create a minimal flight detail if we can't fetch it
+                        flightDetailsMap[flightId] = bookingService.getMockFlightDetails(flightId);
+                    }
+                }
+
+                setFlightDetails(flightDetailsMap);
             } catch (error) {
                 console.error('Error fetching bookings:', error);
             } finally {
@@ -52,6 +79,11 @@ const BookingHistory: React.FC = () => {
         );
     }
 
+    // Sort bookings by date (most recent first)
+    const sortedBookings = [...bookings].sort((a, b) => {
+        return new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime();
+    });
+
     return (
         <div>
             <h1 className="mb-6 text-2xl font-bold text-gray-900 dark:text-white">
@@ -59,8 +91,23 @@ const BookingHistory: React.FC = () => {
             </h1>
 
             <div className="space-y-6">
-                {bookings.map((booking) => {
-                    const flight = booking.flight as any; // Type assertion since we know it's populated
+                {sortedBookings.map((booking) => {
+                    // Get flight details either from the populated flight or from our fetched details
+                    const flightId = typeof booking.flight === 'string' ? booking.flight : (booking.flight as Flight)._id;
+                    const flight = flightDetails[flightId] || null;
+
+                    if (!flight) {
+                        return (
+                            <Card key={booking._id} className="border-amber-200 dark:border-amber-800">
+                                <CardContent className="p-4">
+                                    <p className="text-amber-700 dark:text-amber-300">
+                                        Booking details loading... PNR: {booking.pnr}
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        );
+                    }
+
                     return (
                         <Card key={booking._id}>
                             <CardHeader>

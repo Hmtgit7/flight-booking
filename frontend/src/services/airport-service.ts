@@ -45,10 +45,24 @@ export const getAmadeusToken = async (): Promise<string> => {
   }
 };
 
+// Store search results cache to reduce API calls
+const searchCache: Record<string, { data: Airport[]; timestamp: number }> = {};
+const CACHE_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
 export const airportService = {
   async searchAirports(query: string): Promise<Airport[]> {
     if (query.trim().length < 2) {
       return [];
+    }
+
+    // Check if we have a cached result that's still valid
+    const cacheKey = query.toLowerCase();
+    if (
+      searchCache[cacheKey] &&
+      Date.now() - searchCache[cacheKey].timestamp < CACHE_EXPIRY
+    ) {
+      console.log("Using cached airport search results for:", query);
+      return searchCache[cacheKey].data;
     }
 
     try {
@@ -77,22 +91,55 @@ export const airportService = {
 
       // Map API response to our Airport type
       if (response.data.data && response.data.data.length > 0) {
-        return response.data.data.map((item: any) => ({
+        const airports = response.data.data.map((item: any) => ({
           name: item.name || "",
           city: item.address?.cityName || item.name || "",
           code: item.iataCode || "",
           country: item.address?.countryName || "",
         }));
+
+        // Cache the results
+        searchCache[cacheKey] = {
+          data: airports,
+          timestamp: Date.now(),
+        };
+
+        return airports;
       }
 
-      return mockSearchAirports(query);
+      // If no results from API, try mock data
+      const mockData = mockSearchAirports(query);
+
+      // Cache the mock results
+      searchCache[cacheKey] = {
+        data: mockData,
+        timestamp: Date.now(),
+      };
+
+      return mockData;
     } catch (error) {
       console.error("Error searching airports:", error);
       console.log("Falling back to mock data");
 
       // Fallback to use existing mock data if API fails
-      return mockSearchAirports(query);
+      const mockData = mockSearchAirports(query);
+
+      // Cache the mock results
+      searchCache[cacheKey] = {
+        data: mockData,
+        timestamp: Date.now(),
+      };
+
+      return mockData;
     }
+  },
+
+  // Clear cache method for testing or manual cache invalidation
+  clearCache(): void {
+    Object.keys(searchCache).forEach((key) => {
+      delete searchCache[key];
+    });
+    console.log("Airport search cache cleared");
   },
 };
 
@@ -158,6 +205,67 @@ function mockSearchAirports(query: string): Airport[] {
       city: "Goa",
       code: "GOI",
       country: "India",
+    },
+    // Add international airports for better search results
+    {
+      name: "O'Hare International Airport",
+      city: "Chicago",
+      code: "ORD",
+      country: "United States",
+    },
+    {
+      name: "Midway International Airport",
+      city: "Chicago",
+      code: "MDW",
+      country: "United States",
+    },
+    {
+      name: "Heathrow Airport",
+      city: "London",
+      code: "LHR",
+      country: "United Kingdom",
+    },
+    {
+      name: "Charles de Gaulle Airport",
+      city: "Paris",
+      code: "CDG",
+      country: "France",
+    },
+    {
+      name: "Schiphol Airport",
+      city: "Amsterdam",
+      code: "AMS",
+      country: "Netherlands",
+    },
+    {
+      name: "Dubai International Airport",
+      city: "Dubai",
+      code: "DXB",
+      country: "United Arab Emirates",
+    },
+    {
+      name: "Changi Airport",
+      city: "Singapore",
+      code: "SIN",
+      country: "Singapore",
+    },
+    {
+      name: "Incheon International Airport",
+      city: "Seoul",
+      code: "ICN",
+      country: "South Korea",
+    },
+    {
+      name: "Sydney Airport",
+      city: "Sydney",
+      code: "SYD",
+      country: "Australia",
+    },
+    {
+      name: "Narita International Airport",
+      city: "Tokyo",
+      code: "NRT",
+      country: "Japan",
     },
   ];
 

@@ -47,6 +47,9 @@ export const getAmadeusToken = async (): Promise<string> => {
   }
 };
 
+// Key for storing search history in localStorage
+const SEARCH_HISTORY_KEY = "skybooker_flight_search_history";
+
 export const flightService = {
   async searchFlights(criteria: FlightSearchCriteria): Promise<Flight[]> {
     try {
@@ -82,6 +85,9 @@ export const flightService = {
           console.error("Error parsing saved search counts:", e);
         }
       }
+
+      // Record this search in search history
+      this.recordSearchHistory(criteria);
 
       // If we have valid airport codes, try to use Amadeus API
       if (departureCode && arrivalCode && criteria.departureDate) {
@@ -160,10 +166,12 @@ export const flightService = {
                 _id: `flight_${offer.id || index}`,
                 flightNumber: `${airlineCode}${firstSegment.number}`,
                 airline: getAirlineName(airlineCode), // Helper function to map code to name
-                departureCity: criteria.departureCity?.split(" (")[0],
+                departureCity:
+                  criteria.departureCity?.split(" (")[0] || departureAirport,
                 departureAirport: `${departureAirport} Airport`,
                 departureCode: departureAirport,
-                arrivalCity: criteria.arrivalCity?.split(" (")[0],
+                arrivalCity:
+                  criteria.arrivalCity?.split(" (")[0] || arrivalAirport,
                 arrivalAirport: `${arrivalAirport} Airport`,
                 arrivalCode: arrivalAirport,
                 departureTime: departureTime,
@@ -256,6 +264,40 @@ export const flightService = {
       if (flight) return flight;
 
       throw new Error("Flight not found");
+    }
+  },
+
+  // Store search history for reference
+  recordSearchHistory(criteria: FlightSearchCriteria): void {
+    try {
+      const currentHistory = localStorage.getItem(SEARCH_HISTORY_KEY);
+      let history = currentHistory ? JSON.parse(currentHistory) : [];
+
+      // Add current search to history with timestamp
+      history.push({
+        ...criteria,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Keep only the last 20 searches
+      if (history.length > 20) {
+        history = history.slice(history.length - 20);
+      }
+
+      localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.error("Error recording search history:", e);
+    }
+  },
+
+  // Get search history
+  getSearchHistory(): any[] {
+    try {
+      const currentHistory = localStorage.getItem(SEARCH_HISTORY_KEY);
+      return currentHistory ? JSON.parse(currentHistory) : [];
+    } catch (e) {
+      console.error("Error getting search history:", e);
+      return [];
     }
   },
 };
