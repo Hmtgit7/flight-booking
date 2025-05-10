@@ -53,18 +53,37 @@ export const DevUtils = {
   },
 
   /**
+   * Create a set of test bookings
+   */
+  createTestBookings(count: number = 3): Booking[] {
+    const bookings: Booking[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const booking = this.createTestBooking();
+      bookings.push(booking);
+    }
+
+    console.log(`Created ${count} test bookings`);
+    return bookings;
+  },
+
+  /**
    * Reset all mock bookings (clear booking history)
    */
   resetAllBookings(): void {
     localStorage.removeItem(MOCK_BOOKINGS_KEY);
 
     // Also clear any individual booking items (legacy approach)
+    const keysToRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith("booking_")) {
-        localStorage.removeItem(key);
+        keysToRemove.push(key);
       }
     }
+
+    // Remove outside the loop to avoid indexing issues
+    keysToRemove.forEach((key) => localStorage.removeItem(key));
 
     console.log("All booking data has been cleared");
   },
@@ -89,7 +108,7 @@ export const DevUtils = {
 
   /**
    * Print all local storage data for debugging
-   * @returns Record of all localStorage data
+   * Returns the storage data object for inspection
    */
   printAllStorage(): Record<string, any> {
     console.log("LocalStorage contents:");
@@ -112,14 +131,15 @@ export const DevUtils = {
 
   /**
    * Generate a bookings report
+   * Returns the report data for inspection
    */
-  generateBookingsReport(): any {
+  generateBookingsReport(): Record<string, any> {
     const bookings = bookingService.getAllStoredMockBookings();
     console.log(`Found ${bookings.length} bookings:`);
 
     if (bookings.length === 0) {
       console.log("No bookings found. Try creating a test booking first.");
-      return [];
+      return { bookings: [] };
     }
 
     // Group by status
@@ -159,14 +179,34 @@ export const DevUtils = {
     console.log("Bookings Report:", report);
     return report;
   },
+
+  /**
+   * Initialize default data for testing
+   */
+  initializeTestData(): void {
+    // Create default bookings if none exist
+    const existingBookings = bookingService.getAllStoredMockBookings();
+    if (existingBookings.length === 0) {
+      console.log("No bookings found. Creating default test bookings...");
+      bookingService.createDefaultMockBookings();
+    } else {
+      console.log(`Found ${existingBookings.length} existing bookings`);
+    }
+  },
 };
 
 // Add to window for console access in development
-if (process.env.NODE_ENV !== "production") {
+if (typeof window !== "undefined") {
   (window as any).skyBookerUtils = DevUtils;
   console.log(
     "SkyBooker Dev Utils loaded. Access via window.skyBookerUtils in the console"
   );
+
+  // Auto-initialize test data
+  setTimeout(() => {
+    console.log("Auto-initializing test data...");
+    DevUtils.initializeTestData();
+  }, 1000);
 }
 
 export default DevUtils;

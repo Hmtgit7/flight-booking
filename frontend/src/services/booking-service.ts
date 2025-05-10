@@ -137,6 +137,9 @@ export const bookingService = {
     // Save to localStorage to persist across page refreshes
     this.saveMockBookingToStorage(mockBooking);
 
+    // Log the saved bookings to confirm
+    console.log("All bookings after save:", this.getAllStoredMockBookings());
+
     return mockBooking;
   },
 
@@ -175,6 +178,8 @@ export const bookingService = {
       updatedAt: new Date().toISOString(),
     };
 
+    // Save this for future reference
+    this.saveMockBookingToStorage(mockBooking);
     return mockBooking;
   },
 
@@ -265,25 +270,16 @@ export const bookingService = {
 
     // Get bookings from centralized storage
     let mockBookings = this.getAllStoredMockBookings();
+    console.log("Retrieved mock bookings:", mockBookings);
 
-    // If no bookings in localStorage, return a default one
+    // Add some examples if no bookings exist
     if (mockBookings.length === 0) {
-      const defaultBooking = {
-        _id: "booking_default",
-        user: "current_user",
-        flight: "flight_1",
-        bookingDate: new Date().toISOString(),
-        passengers: [{ name: "John Doe", age: 35, gender: "male" }],
-        totalAmount: 7500,
-        status: "confirmed",
-        pnr: this.generatePNR(),
-        seatNumbers: ["12A"],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      // Create a few example bookings for testing
+      this.createDefaultMockBookings();
 
-      mockBookings = [defaultBooking as Booking];
-      this.saveMockBookingToStorage(defaultBooking as Booking);
+      // Retry getting the bookings
+      mockBookings = this.getAllStoredMockBookings();
+      console.log("Created default mock bookings:", mockBookings);
     }
 
     return mockBookings;
@@ -316,13 +312,99 @@ export const bookingService = {
       // If we found legacy bookings, save them in the new format
       if (legacyBookings.length > 0) {
         localStorage.setItem(MOCK_BOOKINGS_KEY, JSON.stringify(legacyBookings));
+        return legacyBookings;
       }
 
-      return legacyBookings;
+      return [];
     } catch (e) {
       console.error("Error getting stored mock bookings:", e);
       return [];
     }
+  },
+
+  /**
+   * Create some default mock bookings for testing
+   */
+  createDefaultMockBookings(): void {
+    const now = new Date();
+
+    // Create 3 example bookings
+    const bookings: Booking[] = [
+      {
+        _id: "booking_default1",
+        user: "current_user",
+        flight: "flight_123",
+        bookingDate: new Date(
+          now.getTime() - 5 * 24 * 60 * 60 * 1000
+        ).toISOString(), // 5 days ago
+        passengers: [
+          { name: "John Doe", age: 35, gender: "male" },
+          { name: "Jane Doe", age: 32, gender: "female" },
+        ],
+        totalAmount: 15000,
+        status: "confirmed",
+        pnr: "ABC123",
+        seatNumbers: ["12A", "12B"],
+        createdAt: new Date(
+          now.getTime() - 5 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+        updatedAt: new Date(
+          now.getTime() - 5 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+      },
+      {
+        _id: "booking_default2",
+        user: "current_user",
+        flight: "flight_456",
+        bookingDate: new Date(
+          now.getTime() - 10 * 24 * 60 * 60 * 1000
+        ).toISOString(), // 10 days ago
+        passengers: [{ name: "Bob Smith", age: 28, gender: "male" }],
+        totalAmount: 7500,
+        status: "confirmed",
+        pnr: "DEF456",
+        seatNumbers: ["15C"],
+        createdAt: new Date(
+          now.getTime() - 10 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+        updatedAt: new Date(
+          now.getTime() - 10 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+      },
+      {
+        _id: "booking_default3",
+        user: "current_user",
+        flight: "flight_789",
+        bookingDate: new Date(
+          now.getTime() - 2 * 24 * 60 * 60 * 1000
+        ).toISOString(), // 2 days ago
+        passengers: [
+          { name: "Alice Johnson", age: 42, gender: "female" },
+          { name: "Michael Johnson", age: 45, gender: "male" },
+          { name: "Emma Johnson", age: 12, gender: "female" },
+        ],
+        totalAmount: 22500,
+        status: "confirmed",
+        pnr: "GHI789",
+        seatNumbers: ["18A", "18B", "18C"],
+        createdAt: new Date(
+          now.getTime() - 2 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+        updatedAt: new Date(
+          now.getTime() - 2 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+      },
+    ];
+
+    // Save all bookings
+    localStorage.setItem(MOCK_BOOKINGS_KEY, JSON.stringify(bookings));
+
+    // Also save individually for backward compatibility
+    bookings.forEach((booking) => {
+      localStorage.setItem(booking._id, JSON.stringify(booking));
+    });
+
+    console.log("Created default mock bookings:", bookings);
   },
 
   /**
@@ -436,6 +518,10 @@ export const bookingService = {
 
       // For backward compatibility, also save individually
       localStorage.setItem(booking._id, JSON.stringify(booking));
+
+      console.log(
+        `Saved booking ${booking._id} to storage. Total bookings: ${existingBookings.length}`
+      );
     } catch (e) {
       console.error("Error saving booking to localStorage:", e);
     }
