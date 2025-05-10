@@ -1,176 +1,59 @@
 // src/components/bookings/BookingHistory.tsx
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { bookingService } from '../../services/booking-service';
-import { flightService } from '../../services/flight-service';
-import { Booking } from '../../types/booking';
-import { Flight } from '../../types/flight';
+import { useBooking } from '../../context/BookingContext';
+import { useAuth } from '../../context/AuthContext';
 import { formatDate, formatTime } from '../../utils/date';
 import { formatCurrency } from '../../utils/format';
 import Button from '../ui/Button';
 import { Card, CardHeader, CardContent, CardTitle } from '../ui/Card';
 import Loader from '../ui/Loader';
+import Pagination from '../flights/Pagination';
+import Modal from '../ui/Modal';
 
 const BookingHistory: React.FC = () => {
-    const [bookings, setBookings] = useState<Booking[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [flightDetails, setFlightDetails] = useState<Record<string, Flight | any>>({});
-    const [error, setError] = useState<string | null>(null);
+    const { bookings, totalBookings, isLoadingBookings, bookingsError, currentPage, totalPages, loadBookings, cancelBooking, refreshBookings } = useBooking();
+    const { refreshWallet } = useAuth();
+    const [showCancelModal, setShowCancelModal] = useState<boolean>(false);
+    const [bookingToCancel, setBookingToCancel] = useState<string | null>(null);
+    const [cancellationInProgress, setCancellationInProgress] = useState<boolean>(false);
+    const [cancelSuccess, setCancelSuccess] = useState<string | null>(null);
+    const [cancelError, setCancelError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchBookings = async () => {
-            try {
-                // Initialize test data if in development environment
-                if (process.env.NODE_ENV === 'development' && (window as any).skyBookerUtils) {
-                    console.log("Initializing test data from BookingHistory component");
-                    (window as any).skyBookerUtils.initializeTestData();
-                }
-
-                // Fetch bookings
-                const bookingData = await bookingService.getUserBookings();
-                console.log("Fetched bookings:", bookingData);
-                setBookings(bookingData);
-
-                if (bookingData.length === 0) {
-                    console.log("No bookings found, checking mock storage directly");
-                    // Try accessing mock bookings directly (development fallback)
-                    const mockBookings = bookingService.getAllStoredMockBookings();
-                    if (mockBookings.length > 0) {
-                        console.log("Found bookings in mock storage:", mockBookings);
-                        setBookings(mockBookings);
-                    }
-                }
-
-                // Fetch flight details for each booking
-                await populateFlightDetails(bookingData.length > 0 ? bookingData : bookingService.getAllStoredMockBookings());
-            } catch (error) {
-                console.error('Error fetching bookings:', error);
-                setError('Failed to load bookings. Please try again later.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchBookings();
-    }, []);
-
-    // Helper function to get flight details for each booking
-    const populateFlightDetails = async (bookingList: Booking[]) => {
-        const detailsMap: Record<string, any> = {};
-
-        for (const booking of bookingList) {
-            // Handle cases where flight is already populated or just an ID
-            const flightId = typeof booking.flight === 'string' ? booking.flight : (booking.flight as any)._id;
-
-            if (!flightId) {
-                console.error("Missing flight ID for booking:", booking);
-                continue;
-            }
-
-            try {
-                // Skip if we already have details for this flight
-                if (detailsMap[flightId]) continue;
-
-                // Try to get the real flight details
-                if (flightId.match(/^[0-9a-fA-F]{24}$/)) {
-                    // Looks like a MongoDB ObjectId, try the API
-                    try {
-                        const flightDetail = await flightService.getFlightById(flightId);
-                        detailsMap[flightId] = flightDetail;
-                        continue;
-                    } catch (err) {
-                        console.log(`Could not fetch real flight data for ${flightId}, using mock`);
-                    }
-                }
-
-                // If that fails or it's a mock ID, use mock flight details
-                const mockFlightDetails = bookingService.getMockFlightDetails(flightId);
-
-                // Create a minimal flight object from the mock details
-                detailsMap[flightId] = {
-                    _id: flightId,
-                    flightNumber: mockFlightDetails.flightNumber || 'UNKNOWN',
-                    airline: mockFlightDetails.airline || 'Unknown Airline',
-                    departureCity: mockFlightDetails.departureCity || 'Unknown Origin',
-                    departureCode: mockFlightDetails.departureCode || '???',
-                    departureAirport: `${mockFlightDetails.departureCity || 'Unknown'} Airport`,
-                    arrivalCity: mockFlightDetails.arrivalCity || 'Unknown Destination',
-                    arrivalCode: mockFlightDetails.arrivalCode || '???',
-                    arrivalAirport: `${mockFlightDetails.arrivalCity || 'Unknown'} Airport`,
-                    // Use dates from the near future for mock display
-                    departureTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                    arrivalTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString(),
-                    duration: 120,
-                    basePrice: mockFlightDetails.price || 2500,
-                    currentPrice: mockFlightDetails.price || 2500,
-                    seatsAvailable: 50,
-                    aircraft: 'Airbus A320',
-                };
-            } catch (err) {
-                console.error(`Error processing flight details for ${flightId}:`, err);
-                // Create a fallback flight detail
-                detailsMap[flightId] = {
-                    _id: flightId,
-                    flightNumber: 'UNKNOWN',
-                    airline: 'Unknown Airline',
-                    departureCity: 'Unknown Origin',
-                    departureCode: '???',
-                    departureAirport: 'Unknown Airport',
-                    arrivalCity: 'Unknown Destination',
-                    arrivalCode: '???',
-                    arrivalAirport: 'Unknown Airport',
-                    departureTime: new Date().toISOString(),
-                    arrivalTime: new Date().toISOString(),
-                    duration: 0,
-                    basePrice: 0,
-                    currentPrice: 0,
-                    seatsAvailable: 0,
-                    aircraft: 'Unknown',
-                };
-            }
-        }
-
-        setFlightDetails(detailsMap);
+    // Handle page change for pagination
+    const handlePageChange = (page: number) => {
+        loadBookings(page);
     };
 
-    const handleRefresh = async () => {
-        setLoading(true);
+    // Handle booking cancellation
+    const handleCancelBooking = async () => {
+        if (!bookingToCancel) return;
+
+        setCancellationInProgress(true);
+        setCancelSuccess(null);
+        setCancelError(null);
 
         try {
-            // Create default bookings if none exist
-            if (process.env.NODE_ENV === 'development' && (window as any).skyBookerUtils) {
-                console.log("Creating default test bookings");
-                (window as any).skyBookerUtils.initializeTestData();
-            }
-
-            // Fetch bookings again
-            const bookingData = await bookingService.getUserBookings();
-            console.log("Refreshed bookings:", bookingData);
-
-            // If API call returned bookings, use them
-            if (bookingData && bookingData.length > 0) {
-                setBookings(bookingData);
-                await populateFlightDetails(bookingData);
+            const success = await cancelBooking(bookingToCancel);
+            if (success) {
+                setCancelSuccess('Booking cancelled successfully! Your refund has been processed.');
+                refreshWallet(); // Refresh wallet to show updated balance
             } else {
-                // Otherwise check for mock bookings directly
-                const mockBookings = bookingService.getAllStoredMockBookings();
-                if (mockBookings.length > 0) {
-                    console.log("Found bookings in mock storage:", mockBookings);
-                    setBookings(mockBookings);
-                    await populateFlightDetails(mockBookings);
-                }
+                setCancelError('Failed to cancel booking. Please try again.');
             }
-
-            setError(null);
-        } catch (error) {
-            console.error('Error refreshing bookings:', error);
-            setError('Failed to refresh bookings. Please try again later.');
+        } catch (error: any) {
+            setCancelError(error.message || 'Failed to cancel booking. Please try again.');
         } finally {
-            setLoading(false);
+            setCancellationInProgress(false);
         }
     };
 
-    if (loading) {
+    // Handle booking refresh
+    const handleRefresh = async () => {
+        await refreshBookings();
+    };
+
+    if (isLoadingBookings && bookings.length === 0) {
         return (
             <div className="flex h-64 items-center justify-center">
                 <Loader size="lg" />
@@ -178,12 +61,12 @@ const BookingHistory: React.FC = () => {
         );
     }
 
-    if (error) {
+    if (bookingsError) {
         return (
             <div className="text-center">
                 <div className="mb-4 rounded-md bg-red-50 p-4 dark:bg-red-900/20">
                     <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                        {error}
+                        {bookingsError}
                     </p>
                 </div>
                 <Button onClick={handleRefresh}>Try Again</Button>
@@ -200,78 +83,60 @@ const BookingHistory: React.FC = () => {
                 <p className="mt-2 text-gray-600 dark:text-gray-400">
                     You haven't made any bookings yet. Start by searching for flights.
                 </p>
-                <div className="mt-4 flex justify-center space-x-4">
+                <div className="mt-4">
                     <Link to="/search">
                         <Button>Search Flights</Button>
                     </Link>
-                    {process.env.NODE_ENV === 'development' && (
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                if ((window as any).skyBookerUtils) {
-                                    (window as any).skyBookerUtils.createTestBooking();
-                                    handleRefresh();
-                                } else {
-                                    console.error("Development utilities not available");
-                                    alert("Development utilities not available");
-                                }
-                            }}
-                        >
-                            Create Test Booking
-                        </Button>
-                    )}
                 </div>
             </div>
         );
     }
 
-    // Sort bookings by date (most recent first)
-    const sortedBookings = [...bookings].sort((a, b) => {
-        return new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime();
-    });
-
     return (
         <div>
             <div className="mb-6 flex items-center justify-between">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    My Bookings
-                </h1>
-                <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-                    {loading ? 'Refreshing...' : 'Refresh'}
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                        Your Bookings ({totalBookings})
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                        Showing {bookings.length} of {totalBookings} bookings
+                    </p>
+                </div>
+                <Button variant="outline" onClick={handleRefresh} disabled={isLoadingBookings}>
+                    {isLoadingBookings ? <Loader size="sm" /> : 'Refresh'}
                 </Button>
             </div>
 
             <div className="space-y-6">
-                {sortedBookings.map((booking) => {
-                    // Get flight details either from the populated flight or from our fetched details
-                    const flightId = typeof booking.flight === 'string' ? booking.flight : (booking.flight as any)._id;
-                    const flight = flightDetails[flightId];
+                {bookings.map((booking) => {
+                    // Get flight details
+                    const flight = typeof booking.flight === 'string'
+                        ? null
+                        : booking.flight;
 
-                    if (!flight) {
-                        return (
-                            <Card key={booking._id} className="border-amber-200 dark:border-amber-800">
-                                <CardContent className="p-4">
-                                    <p className="text-amber-700 dark:text-amber-300">
-                                        Booking details loading... PNR: {booking.pnr}
-                                    </p>
-                                </CardContent>
-                            </Card>
-                        );
-                    }
+                    // Check if booking is for a future date
+                    const bookingDate = new Date(booking.bookingDate);
+                    const now = new Date();
+                    const isPastBooking = bookingDate < now;
+
+                    // Check if flight departure is in the future (can be cancelled)
+                    const canCancel = booking.status === 'confirmed' && flight &&
+                        new Date(flight.departureTime) > new Date();
 
                     return (
-                        <Card key={booking._id}>
+                        <Card key={booking._id} className={booking.status === 'cancelled' ? 'border-red-200 dark:border-red-800' : ''}>
                             <CardHeader>
                                 <div className="flex items-center justify-between">
                                     <CardTitle>
-                                        {flight.departureCity} to {flight.arrivalCity}
+                                        {flight ? `${flight.departureCity} to ${flight.arrivalCity}` : 'Flight Details Loading...'}
                                     </CardTitle>
                                     <div
                                         className={`rounded-full px-3 py-1 text-xs font-medium ${booking.status === 'confirmed'
-                                            ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                                            : booking.status === 'cancelled'
-                                                ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
-                                                : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                                                ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                                                : booking.status === 'cancelled'
+                                                    ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                                                    : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
                                             }`}
                                     >
                                         {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
@@ -288,44 +153,48 @@ const BookingHistory: React.FC = () => {
                                             {booking.pnr}
                                         </p>
                                     </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                            Flight
-                                        </p>
-                                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                                            {flight.airline} {flight.flightNumber}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                            Date
-                                        </p>
-                                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                                            {formatDate(flight.departureTime)}
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                            Departure
-                                        </p>
-                                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                                            {formatTime(flight.departureTime)}
-                                        </p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            {flight.departureCity} ({flight.departureCode})
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                                            Arrival
-                                        </p>
-                                        <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                                            {formatTime(flight.arrivalTime)}
-                                        </p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            {flight.arrivalCity} ({flight.arrivalCode})
-                                        </p>
-                                    </div>
+                                    {flight && (
+                                        <>
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                    Flight
+                                                </p>
+                                                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                                                    {flight.airline} {flight.flightNumber}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                    Date
+                                                </p>
+                                                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                                                    {formatDate(flight.departureTime)}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                    Departure
+                                                </p>
+                                                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                                                    {formatTime(flight.departureTime)}
+                                                </p>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    {flight.departureCity} ({flight.departureCode})
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                    Arrival
+                                                </p>
+                                                <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                                                    {formatTime(flight.arrivalTime)}
+                                                </p>
+                                                <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                    {flight.arrivalCity} ({flight.arrivalCode})
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
                                     <div>
                                         <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
                                             Total Amount
@@ -340,9 +209,21 @@ const BookingHistory: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="mt-4 flex justify-end">
+                                <div className="mt-4 flex justify-end space-x-2">
+                                    {canCancel && (
+                                        <Button
+                                            variant="danger"
+                                            size="sm"
+                                            onClick={() => {
+                                                setBookingToCancel(booking._id);
+                                                setShowCancelModal(true);
+                                            }}
+                                        >
+                                            Cancel Booking
+                                        </Button>
+                                    )}
                                     <Link to={`/booking/${booking._id}`}>
-                                        <Button variant="outline">View Details</Button>
+                                        <Button variant="outline" size="sm">View Details</Button>
                                     </Link>
                                 </div>
                             </CardContent>
@@ -350,6 +231,66 @@ const BookingHistory: React.FC = () => {
                     );
                 })}
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="mt-6">
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        onPageChange={handlePageChange}
+                    />
+                </div>
+            )}
+
+            {/* Cancellation Confirmation Modal */}
+            <Modal
+                isOpen={showCancelModal}
+                onClose={() => setShowCancelModal(false)}
+                title="Cancel Booking"
+            >
+                <div className="space-y-4">
+                    {!cancelSuccess ? (
+                        <>
+                            <p className="text-gray-700 dark:text-gray-300">
+                                Are you sure you want to cancel this booking? You will receive a refund of 90% of the booking amount to your wallet.
+                            </p>
+                            {cancelError && (
+                                <div className="rounded-md bg-red-50 p-3 dark:bg-red-900/20">
+                                    <p className="text-sm text-red-800 dark:text-red-200">{cancelError}</p>
+                                </div>
+                            )}
+                            <div className="flex justify-end space-x-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setShowCancelModal(false)}
+                                    disabled={cancellationInProgress}
+                                >
+                                    No, Keep Booking
+                                </Button>
+                                <Button
+                                    variant="danger"
+                                    onClick={handleCancelBooking}
+                                    isLoading={cancellationInProgress}
+                                >
+                                    Yes, Cancel Booking
+                                </Button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="rounded-md bg-green-50 p-3 dark:bg-green-900/20">
+                                <p className="text-sm text-green-800 dark:text-green-200">{cancelSuccess}</p>
+                            </div>
+                            <div className="flex justify-end">
+                                <Button onClick={() => setShowCancelModal(false)}>
+                                    Close
+                                </Button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </Modal>
         </div>
     );
 };

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types/user';
 import { authService } from '../services/auth-service';
+import { walletService } from '../services/wallet-service';
 import { getToken } from '../utils/storage';
 import { Wallet } from '../types/wallet';
 
@@ -13,7 +14,9 @@ interface AuthContextType {
     login: (email: string, password: string) => Promise<void>;
     register: (name: string, email: string, password: string) => Promise<void>;
     logout: () => void;
-    updateUserWallet: (wallet: Wallet) => void;
+    refreshWallet: () => Promise<void>;
+    isRefreshingWallet: boolean;
+    walletError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,15 +25,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const [user, setUser] = useState<User | null>(null);
     const [wallet, setWallet] = useState<Wallet | null>(null);
     const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [isRefreshingWallet, setIsRefreshingWallet] = useState<boolean>(false);
+    const [walletError, setWalletError] = useState<string | null>(null);
 
+    // Load user data when component mounts
     useEffect(() => {
         const loadUser = async () => {
             try {
                 const token = getToken();
                 if (token) {
-                    const { user, wallet } = await authService.getCurrentUser();
+                    const { user } = await authService.getCurrentUser();
                     setUser(user);
-                    setWallet(wallet);
+
+                    // Load wallet data after user is loaded
+                    await refreshWallet();
                 }
             } catch (error) {
                 console.error('Error loading user:', error);
@@ -43,12 +51,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         loadUser();
     }, []);
 
+    // Function to refresh wallet balance and data
+    const refreshWallet = async () => {
+        if (!user) return;
+
+        setIsRefreshingWallet(true);
+        setWalletError(null);
+
+        try {
+            const walletData = await walletService.getUserWallet();
+            setWallet(walletData);
+        } catch (error: any) {
+            console.error('Error refreshing wallet:', error);
+            setWalletError(error.message || 'Failed to load wallet information');
+        } finally {
+            setIsRefreshingWallet(false);
+        }
+    };
+
     const login = async (email: string, password: string) => {
         setIsLoading(true);
         try {
             const response = await authService.login({ email, password });
             setUser(response.user);
-            setWallet(response.wallet);
+
+            // Load wallet data after successful login
+            try {
+                const walletData = await walletService.getUserWallet();
+                setWallet(walletData);
+            } catch (walletError) {
+                console.error('Error loading wallet after login:', walletError);
+            }
         } catch (error) {
             console.error('Login error:', error);
             throw error;
@@ -62,7 +95,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
             const response = await authService.register({ name, email, password });
             setUser(response.user);
-            setWallet(response.wallet);
+
+            // Load wallet data after successful registration
+            try {
+                const walletData = await walletService.getUserWallet();
+                setWallet(walletData);
+            } catch (walletError) {
+                console.error('Error loading wallet after registration:', walletError);
+            }
         } catch (error) {
             console.error('Registration error:', error);
             throw error;
@@ -77,10 +117,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setWallet(null);
     };
 
-    const updateUserWallet = (newWallet: Wallet) => {
-        setWallet(newWallet);
-    };
-
     const value = {
         user,
         wallet,
@@ -89,7 +125,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         register,
         logout,
-        updateUserWallet
+        refreshWallet,
+        isRefreshingWallet,
+        walletError
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -102,4 +140,3 @@ export const useAuth = () => {
     }
     return context;
 };
-

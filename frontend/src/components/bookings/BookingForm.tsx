@@ -1,5 +1,5 @@
 // src/components/bookings/BookingForm.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,14 +14,17 @@ import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle } from '../ui/Card';
+import Modal from '../ui/Modal';
 
 type BookingFormValues = z.infer<typeof bookingSchema>;
 
 const BookingForm: React.FC = () => {
     const { selectedFlight } = useBooking();
-    const { wallet } = useAuth();
+    const { wallet, refreshWallet } = useAuth();
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [bookingError, setBookingError] = useState<string | null>(null);
+    const [showErrorModal, setShowErrorModal] = useState(false);
 
     const {
         control,
@@ -40,6 +43,13 @@ const BookingForm: React.FC = () => {
         name: 'passengers',
     });
 
+    useEffect(() => {
+        // Make sure the form is updated if selectedFlight changes
+        if (selectedFlight) {
+            control._formValues.flightId = selectedFlight._id;
+        }
+    }, [selectedFlight, control._formValues]);
+
     const handleAddPassenger = () => {
         append({ name: '', age: 30, gender: 'male' });
     };
@@ -48,12 +58,20 @@ const BookingForm: React.FC = () => {
         if (!selectedFlight) return;
 
         setIsSubmitting(true);
+        setBookingError(null);
+
         try {
             const booking = await bookingService.createBooking(data);
+
+            // Refresh wallet to show updated balance
+            await refreshWallet();
+
+            // Navigate to confirmation page
             navigate(`/booking/${booking._id}/confirmation`);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error creating booking:', error);
-            alert('Failed to create booking. Please try again.');
+            setBookingError(error.message || 'Failed to create booking. Please try again.');
+            setShowErrorModal(true);
         } finally {
             setIsSubmitting(false);
         }
@@ -256,7 +274,7 @@ const BookingForm: React.FC = () => {
                                     <div className="ml-3">
                                         <p className="text-sm font-medium text-red-600 dark:text-red-400">
                                             Insufficient wallet balance. Please reduce the number of passengers or
-                                            top up your wallet.
+                                            check your wallet balance.
                                         </p>
                                     </div>
                                 </div>
@@ -283,9 +301,28 @@ const BookingForm: React.FC = () => {
                     </CardFooter>
                 </Card>
             </form>
+
+            {/* Error Modal */}
+            <Modal
+                isOpen={showErrorModal}
+                onClose={() => setShowErrorModal(false)}
+                title="Booking Error"
+            >
+                <div className="space-y-4">
+                    <div className="rounded-md bg-red-50 p-3 dark:bg-red-900/20">
+                        <p className="text-sm text-red-800 dark:text-red-200">
+                            {bookingError}
+                        </p>
+                    </div>
+                    <div className="flex justify-end">
+                        <Button onClick={() => setShowErrorModal(false)}>
+                            Close
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };
 
 export default BookingForm;
-

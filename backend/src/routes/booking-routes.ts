@@ -5,10 +5,25 @@ import { authMiddleware } from "../middleware/auth-middleware";
 
 const router = express.Router();
 
-// Apply authMiddleware to specific routes instead of using router.all
-router.post("/", authMiddleware, BookingController.createBooking);
-router.get("/", authMiddleware, BookingController.getUserBookings);
-router.get("/:id", authMiddleware, BookingController.getBookingById);
-router.get("/:id/ticket", authMiddleware, BookingController.generateTicket);
+// All booking routes require authentication
+router.use(authMiddleware);
+
+// Create a new booking
+router.post("/", BookingController.createBooking);
+
+// Get all bookings for the current user
+router.get("/", BookingController.getUserBookings);
+
+// Get booking statistics
+router.get("/stats", BookingController.getBookingStats);
+
+// Get a specific booking by ID
+router.get("/:id", BookingController.getBookingById);
+
+// Generate ticket for a booking
+router.get("/:id/ticket", BookingController.generateTicket);
+
+// Cancel a booking
+router.post("/:id/cancel", BookingController.cancelBooking);
 
 export default router;

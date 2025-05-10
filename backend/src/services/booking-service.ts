@@ -1,7 +1,7 @@
 // backend/src/services/booking-service.ts
 import { Booking, IBooking } from "../models/booking-model";
 import { Flight } from "../models/flight-model";
-import { Wallet } from "../models/wallet-model";
+import { WalletService } from "./wallet-service";
 import { PricingService } from "./pricing-service";
 import mongoose from "mongoose";
 
@@ -28,10 +28,19 @@ function generateSeatNumbers(count: number): string[] {
   const rows = ["A", "B", "C", "D", "E", "F"];
   const seats = [];
 
+  // Use a set to avoid duplicate seat numbers
+  const assignedSeats = new Set<string>();
+
   for (let i = 0; i < count; i++) {
-    const rowNumber = Math.floor(Math.random() * 30) + 1;
-    const seatLetter = rows[Math.floor(Math.random() * rows.length)];
-    seats.push(`${rowNumber}${seatLetter}`);
+    let seat;
+    do {
+      const rowNumber = Math.floor(Math.random() * 30) + 1;
+      const seatLetter = rows[Math.floor(Math.random() * rows.length)];
+      seat = `${rowNumber}${seatLetter}`;
+    } while (assignedSeats.has(seat));
+
+    assignedSeats.add(seat);
+    seats.push(seat);
   }
 
   return seats;
@@ -39,7 +48,7 @@ function generateSeatNumbers(count: number): string[] {
 
 export class BookingService {
   /**
-   * Create a new booking
+   * Create a new booking with wallet integration
    */
   static async createBooking(bookingData: BookingData): Promise<IBooking> {
     const session = await mongoose.startSession();
@@ -48,28 +57,31 @@ export class BookingService {
     try {
       const { userId, flightId, passengers } = bookingData;
 
-      // Get current flight price
+      // Get flight with detailed information
       const flight = await Flight.findById(flightId);
       if (!flight) {
         throw new Error("Flight not found");
       }
 
+      // Validate seats availability
+      if (flight.seatsAvailable < passengers.length) {
+        throw new Error(
+          `Only ${flight.seatsAvailable} seats available on this flight`
+        );
+      }
+
+      // Get current price with dynamic pricing
       const currentPrice = await PricingService.getCurrentPrice(
         flightId,
         userId
       );
       const totalAmount = currentPrice * passengers.length;
 
-      // Check if user has enough balance
-      const wallet = await Wallet.findOne({ user: userId });
-      if (!wallet || wallet.balance < totalAmount) {
-        throw new Error("Insufficient wallet balance");
-      }
-
-      // Create booking
+      // Generate PNR and seat numbers
       const pnr = generatePNR();
       const seatNumbers = generateSeatNumbers(passengers.length);
 
+      // Create booking
       const booking = new Booking({
         user: userId,
         flight: flightId,
@@ -82,41 +94,66 @@ export class BookingService {
 
       await booking.save({ session });
 
-      // Deduct amount from wallet
-      wallet.balance -= totalAmount;
-      wallet.transactions.push({
-        type: "debit",
-        amount: totalAmount,
-        description: `Flight booking: ${flight.flightNumber} from ${flight.departureCity} to ${flight.arrivalCity}`,
-        date: new Date(),
-      });
-
-      await wallet.save({ session });
+      // Update wallet - deduct booking amount
+      try {
+        await WalletService.updateWalletBalance(
+          userId,
+          totalAmount,
+          "debit",
+          `Flight booking: ${flight.flightNumber} from ${flight.departureCity} to ${flight.arrivalCity}`,
+          session
+        );
+      } catch (walletError) {
+        // If wallet update fails, abort transaction and throw error
+        await session.abortTransaction();
+        throw walletError;
+      }
 
       // Update flight seats available
       flight.seatsAvailable -= passengers.length;
       await flight.save({ session });
 
       await session.commitTransaction();
-      session.endSession();
-
       return booking;
     } catch (error) {
       await session.abortTransaction();
-      session.endSession();
       console.error("Error creating booking:", error);
       throw error;
+    } finally {
+      session.endSession();
     }
   }
 
   /**
-   * Get all bookings for a user
+   * Get all bookings for a user with pagination
    */
-  static async getUserBookings(userId: string): Promise<IBooking[]> {
+  static async getUserBookings(
+    userId: string,
+    page: number = 1,
+    limit: number = 10
+  ): Promise<{
+    bookings: IBooking[];
+    total: number;
+    page: number;
+    pages: number;
+  }> {
     try {
-      return await Booking.find({ user: userId })
+      const total = await Booking.countDocuments({ user: userId });
+      const pages = Math.ceil(total / limit);
+      const skip = (page - 1) * limit;
+
+      const bookings = await Booking.find({ user: userId })
         .populate("flight")
-        .sort({ bookingDate: -1 });
+        .sort({ bookingDate: -1 })
+        .skip(skip)
+        .limit(limit);
+
+      return {
+        bookings,
+        total,
+        page,
+        pages,
+      };
     } catch (error) {
       console.error("Error getting user bookings:", error);
       throw error;
@@ -126,11 +163,115 @@ export class BookingService {
   /**
    * Get booking details by ID
    */
-  static async getBookingById(bookingId: string): Promise<IBooking | null> {
+  static async getBookingById(
+    bookingId: string,
+    userId: string
+  ): Promise<IBooking | null> {
     try {
-      return await Booking.findById(bookingId).populate("flight");
+      const booking = await Booking.findById(bookingId).populate("flight");
+
+      // Security check: ensure the booking belongs to the requesting user
+      if (booking && booking.user.toString() !== userId) {
+        throw new Error("Unauthorized access to booking");
+      }
+
+      return booking;
     } catch (error) {
       console.error("Error getting booking by ID:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancel a booking and refund wallet
+   */
+  static async cancelBooking(
+    bookingId: string,
+    userId: string
+  ): Promise<IBooking> {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Find booking and validate user ownership
+      const booking = await Booking.findById(bookingId).session(session);
+
+      if (!booking) {
+        throw new Error("Booking not found");
+      }
+
+      if (booking.user.toString() !== userId) {
+        throw new Error("Unauthorized access to booking");
+      }
+
+      if (booking.status === "cancelled") {
+        throw new Error("Booking is already cancelled");
+      }
+
+      // Calculate refund amount based on cancellation policy
+      // For simplicity, let's return 90% of the booking amount
+      const refundAmount = Math.floor(booking.totalAmount * 0.9);
+
+      // Update booking status
+      booking.status = "cancelled";
+      await booking.save({ session });
+
+      // Restore flight seat availability
+      const flight = await Flight.findById(booking.flight).session(session);
+      if (flight) {
+        flight.seatsAvailable += booking.passengers.length;
+        await flight.save({ session });
+      }
+
+      // Refund wallet
+      await WalletService.updateWalletBalance(
+        userId,
+        refundAmount,
+        "credit",
+        `Refund for cancelled booking: ${booking.pnr}`,
+        session
+      );
+
+      await session.commitTransaction();
+      return booking;
+    } catch (error) {
+      await session.abortTransaction();
+      console.error("Error cancelling booking:", error);
+      throw error;
+    } finally {
+      session.endSession();
+    }
+  }
+
+  /**
+   * Get booking statistics for a user
+   */
+  static async getUserBookingStats(userId: string): Promise<any> {
+    try {
+      const totalBookings = await Booking.countDocuments({ user: userId });
+      const upcomingBookings = await Booking.countDocuments({
+        user: userId,
+        status: "confirmed",
+        "flight.departureTime": { $gt: new Date() },
+      });
+      const cancelledBookings = await Booking.countDocuments({
+        user: userId,
+        status: "cancelled",
+      });
+
+      const totalSpent = await Booking.aggregate([
+        { $match: { user: new mongoose.Types.ObjectId(userId) } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
+      ]);
+
+      return {
+        totalBookings,
+        upcomingBookings,
+        cancelledBookings,
+        totalSpent: totalSpent.length > 0 ? totalSpent[0].total : 0,
+      };
+    } catch (error) {
+      console.error("Error getting booking statistics:", error);
       throw error;
     }
   }

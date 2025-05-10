@@ -5,7 +5,16 @@ import { authMiddleware } from "../middleware/auth-middleware";
 
 const router = express.Router();
 
-// Apply authMiddleware to specific routes instead of using router.all
-router.get("/", authMiddleware, WalletController.getUserWallet);
+// All wallet routes require authentication
+router.use(authMiddleware);
+
+// Get wallet balance
+router.get("/", WalletController.getUserWallet);
+
+// Get wallet transactions
+router.get("/transactions", WalletController.getWalletTransactions);
+
+// Get transaction summary
+router.get("/summary", WalletController.getTransactionSummary);
 
 export default router;
