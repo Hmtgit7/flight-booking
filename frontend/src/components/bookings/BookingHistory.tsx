@@ -8,7 +8,7 @@ import { formatCurrency } from '../../utils/format';
 import Button from '../ui/Button';
 import { Card, CardHeader, CardContent, CardTitle } from '../ui/Card';
 import Loader from '../ui/Loader';
-import Pagination from '../flights/Pagination';
+import Pagination from '../ui/Pagination';
 import Modal from '../ui/Modal';
 
 const BookingHistory: React.FC = () => {

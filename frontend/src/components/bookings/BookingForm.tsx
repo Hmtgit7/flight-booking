@@ -18,12 +18,12 @@ import Modal from '../ui/Modal';
 
 type BookingFormValues = z.infer<typeof bookingSchema>;
 
-const BookingForm: React.FC = () => {
+const BookingForm = () => {
     const { selectedFlight } = useBooking();
     const { wallet, refreshWallet } = useAuth();
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [bookingError, setBookingError] = useState<string | null>(null);
+    const [bookingError, setBookingError] = useState('');
     const [showErrorModal, setShowErrorModal] = useState(false);
 
     const {
@@ -43,12 +43,19 @@ const BookingForm: React.FC = () => {
         name: 'passengers',
     });
 
+    // Update flightId when selectedFlight changes
     useEffect(() => {
-        // Make sure the form is updated if selectedFlight changes
-        if (selectedFlight) {
+        if (selectedFlight && selectedFlight._id) {
             control._formValues.flightId = selectedFlight._id;
         }
     }, [selectedFlight, control._formValues]);
+
+    // Make sure we have the latest wallet data
+    useEffect(() => {
+        if (!wallet) {
+            refreshWallet();
+        }
+    }, [wallet, refreshWallet]);
 
     const handleAddPassenger = () => {
         append({ name: '', age: 30, gender: 'male' });
@@ -58,12 +65,22 @@ const BookingForm: React.FC = () => {
         if (!selectedFlight) return;
 
         setIsSubmitting(true);
-        setBookingError(null);
+        setBookingError('');
 
         try {
+            // Ensure we have an up-to-date wallet balance before booking
+            await refreshWallet();
+
+            // Validate if we have sufficient balance
+            const totalPrice = selectedFlight.currentPrice * data.passengers.length;
+            if ((wallet?.balance || 0) < totalPrice) {
+                throw new Error('Insufficient wallet balance for this booking');
+            }
+
+            // Create booking
             const booking = await bookingService.createBooking(data);
 
-            // Refresh wallet to show updated balance
+            // Refresh wallet to reflect the new balance
             await refreshWallet();
 
             // Navigate to confirmation page
@@ -77,17 +94,20 @@ const BookingForm: React.FC = () => {
         }
     };
 
+    // Redirect if no flight is selected
     if (!selectedFlight) {
         navigate('/search');
         return null;
     }
 
+    // Calculate totals
     const totalPrice = selectedFlight.currentPrice * fields.length;
     const walletBalance = wallet?.balance || 0;
     const hasInsufficientFunds = totalPrice > walletBalance;
 
     return (
         <div className="mx-auto max-w-3xl">
+            {/* Flight Details Card */}
             <Card className="mb-6">
                 <CardHeader>
                     <CardTitle>Flight Details</CardTitle>
@@ -140,6 +160,7 @@ const BookingForm: React.FC = () => {
                 </CardContent>
             </Card>
 
+            {/* Passenger Details Form */}
             <form onSubmit={handleSubmit(onSubmit)}>
                 <Card className="mb-6">
                     <CardHeader>
@@ -230,6 +251,7 @@ const BookingForm: React.FC = () => {
                     </CardContent>
                 </Card>
 
+                {/* Pricing and Wallet Card */}
                 <Card>
                     <CardContent className="pt-6">
                         <div className="flex items-center justify-between mb-4">
@@ -240,6 +262,12 @@ const BookingForm: React.FC = () => {
                                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
                                     {formatCurrency(walletBalance)}
                                 </p>
+                                <button
+                                    onClick={() => refreshWallet()}
+                                    className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mt-1"
+                                >
+                                    Refresh balance
+                                </button>
                             </div>
                             <div className="text-right">
                                 <p className="text-sm font-medium text-gray-500 dark:text-gray-400">

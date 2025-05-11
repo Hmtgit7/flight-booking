@@ -1,16 +1,32 @@
 // src/components/layout/Header.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
-import { formatCurrency } from '../../utils/format';
+import WalletDisplay from './WalletDisplay';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getConnectionStatus } from '../../services/api';
 
 const Header: React.FC = () => {
-    const { user, wallet, isAuthenticated, logout } = useAuth();
+    const { user, isAuthenticated, logout } = useAuth();
     const navigate = useNavigate();
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [isOffline, setIsOffline] = useState(false);
+
+    // Check connection status periodically
+    useEffect(() => {
+        const checkConnection = () => {
+            setIsOffline(!getConnectionStatus());
+        };
+
+        // Initial check
+        checkConnection();
+
+        // Check every 10 seconds
+        const interval = setInterval(checkConnection, 10000);
+        return () => clearInterval(interval);
+    }, []);
 
     const handleLogout = () => {
         logout();
@@ -20,6 +36,13 @@ const Header: React.FC = () => {
 
     return (
         <header className="sticky top-0 z-40 w-full border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+            {/* Offline indicator */}
+            {isOffline && (
+                <div className="bg-yellow-500 text-yellow-900 text-center text-xs py-1 px-2">
+                    You are currently offline. Some features may be limited.
+                </div>
+            )}
+
             <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
                 <div className="flex items-center">
                     <Link to="/" className="flex items-center">
@@ -94,16 +117,11 @@ const Header: React.FC = () => {
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -10 }}
                                             transition={{ duration: 0.2 }}
-                                            className="absolute right-0 mt-2 w-48 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-700"
+                                            className="absolute right-0 mt-2 w-64 origin-top-right rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-700"
                                         >
-                                            <div className="border-b border-gray-200 px-4 py-2 dark:border-gray-600">
-                                                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                                    Wallet Balance
-                                                </p>
-                                                <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                                                    {wallet ? formatCurrency(wallet.balance) : 'Loading...'}
-                                                </p>
-                                            </div>
+                                            {/* Integrated Wallet Display */}
+                                            <WalletDisplay />
+
                                             <Link
                                                 to="/profile"
                                                 className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-600"
@@ -186,6 +204,13 @@ const Header: React.FC = () => {
                         className="md:hidden"
                     >
                         <div className="border-t border-gray-200 px-4 py-2 dark:border-gray-700">
+                            {isAuthenticated && (
+                                // Display wallet in mobile menu
+                                <div className="mb-2">
+                                    <WalletDisplay />
+                                </div>
+                            )}
+
                             <Link
                                 to="/"
                                 className="block py-2 text-base font-medium text-gray-700 dark:text-gray-200"
@@ -217,14 +242,6 @@ const Header: React.FC = () => {
                                         Profile
                                     </Link>
                                     <div className="border-t border-gray-200 py-2 dark:border-gray-700">
-                                        <div className="mb-2">
-                                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                Wallet Balance
-                                            </p>
-                                            <p className="text-lg font-bold text-blue-600 dark:text-blue-400">
-                                                {wallet ? formatCurrency(wallet.balance) : 'Loading...'}
-                                            </p>
-                                        </div>
                                         <button
                                             onClick={handleLogout}
                                             className="block w-full py-2 text-left text-base font-medium text-red-600 dark:text-red-400"
