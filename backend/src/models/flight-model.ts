@@ -24,7 +24,12 @@ export interface IFlight extends Document {
 
 const FlightSchema: Schema = new Schema(
   {
-    flightNumber: { type: String, required: true },
+    flightNumber: {
+      type: String,
+      required: true,
+      // Add index to improve lookups by flightNumber
+      index: true,
+    },
     airline: { type: String, required: true },
     departureCity: { type: String, required: true },
     departureAirport: { type: String, required: true },
@@ -44,5 +49,14 @@ const FlightSchema: Schema = new Schema(
   },
   { timestamps: true }
 );
+
+// Add a pre-save hook to handle special case for flightNumber "flight_1"
+FlightSchema.pre<IFlight>("save", async function (next) {
+  // If this is a new flight with flightNumber "flight_1"
+  if (this.isNew && this.flightNumber === "flight_1") {
+    console.log("Special case: Saving flight with flightNumber 'flight_1'");
+  }
+  next();
+});
 
 export const Flight = mongoose.model<IFlight>("Flight", FlightSchema);

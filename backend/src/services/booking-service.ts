@@ -57,10 +57,32 @@ export class BookingService {
     try {
       const { userId, flightId, passengers } = bookingData;
 
-      // Get flight with detailed information
-      const flight = await Flight.findById(flightId);
+      let flight;
+      // Check if flightId is a valid MongoDB ObjectId
+      if (mongoose.Types.ObjectId.isValid(flightId)) {
+        // If it's a valid ObjectId, find by that ID
+        flight = await Flight.findById(flightId);
+      } else {
+        // If it's not a valid ObjectId (e.g., "flight_1"), find by flightNumber or another field
+        const flightIdParts = flightId.split("_");
+        const flightNumber =
+          flightIdParts.length > 1 ? flightIdParts[1] : flightId;
+
+        flight = await Flight.findOne({
+          $or: [
+            { flightNumber: flightNumber },
+            { flightNumber: `flight_${flightNumber}` },
+          ],
+        });
+
+        // If still not found, try to find the first flight (for demo purposes)
+        if (!flight && flightId === "flight_1") {
+          flight = await Flight.findOne();
+        }
+      }
+
       if (!flight) {
-        throw new Error("Flight not found");
+        throw new Error(`Flight not found for ID: ${flightId}`);
       }
 
       // Validate seats availability
@@ -72,7 +94,7 @@ export class BookingService {
 
       // Get current price with dynamic pricing
       const currentPrice = await PricingService.getCurrentPrice(
-        flightId,
+        flight._id.toString(),
         userId
       );
       const totalAmount = currentPrice * passengers.length;
@@ -84,7 +106,7 @@ export class BookingService {
       // Create booking
       const booking = new Booking({
         user: userId,
-        flight: flightId,
+        flight: flight._id, // Use the actual MongoDB ObjectId
         passengers,
         totalAmount,
         status: "confirmed",

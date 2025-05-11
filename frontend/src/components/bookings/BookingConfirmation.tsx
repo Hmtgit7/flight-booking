@@ -2,9 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { bookingService } from '../../services/booking-service';
+import { flightService } from '../../services/flight-service';
 import { pdfService } from '../../services/pdf-service';
 import { useAuth } from '../../context/AuthContext';
+import { useBooking } from '../../context/BookingContext';
 import { Booking, TicketData } from '../../types/booking';
+import { Flight } from '../../types/flight';
 import { formatDate, formatTime, getDurationFromMinutes } from '../../utils/date';
 import { formatCurrency } from '../../utils/format';
 import Button from '../ui/Button';
@@ -16,9 +19,11 @@ const BookingConfirmation: React.FC = () => {
     const navigate = useNavigate();
     const { id } = useParams<{ id: string }>();
     const { refreshWallet } = useAuth();
+    const { selectedFlight } = useBooking();
 
     // State management
     const [booking, setBooking] = useState<Booking | null>(null);
+    const [flight, setFlight] = useState<Flight | null>(null);
     const [ticket, setTicket] = useState<TicketData | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
@@ -43,9 +48,89 @@ const BookingConfirmation: React.FC = () => {
                 const bookingData = await bookingService.getBookingById(id);
                 setBooking(bookingData);
 
-                // Generate ticket data
-                const ticketData = await bookingService.generateTicket(id);
-                setTicket(ticketData);
+                // If we have the flight from the booking context, use it
+                // This fixes the "Flight not found" issue
+                if (selectedFlight) {
+                    setFlight(selectedFlight);
+
+                    // Generate ticket data locally if we have both booking and flight
+                    const ticketData = {
+                        bookingId: bookingData._id,
+                        pnr: bookingData.pnr,
+                        airline: selectedFlight.airline,
+                        flightNumber: selectedFlight.flightNumber,
+                        departureCity: selectedFlight.departureCity,
+                        departureAirport: selectedFlight.departureAirport,
+                        departureCode: selectedFlight.departureCode,
+                        departureTime: selectedFlight.departureTime,
+                        arrivalCity: selectedFlight.arrivalCity,
+                        arrivalAirport: selectedFlight.arrivalAirport,
+                        arrivalCode: selectedFlight.arrivalCode,
+                        arrivalTime: selectedFlight.arrivalTime,
+                        duration: selectedFlight.duration,
+                        aircraft: selectedFlight.aircraft,
+                        bookingDate: bookingData.bookingDate,
+                        totalAmount: bookingData.totalAmount,
+                        passengers: bookingData.passengers.map((passenger, index) => ({
+                            ...passenger,
+                            seat: bookingData.seatNumbers[index] || "Not assigned"
+                        }))
+                    };
+                    setTicket(ticketData);
+                } else {
+                    // If we don't have the flight in context, try to fetch it from the API
+                    try {
+                        // Try to generate ticket from backend (may fail if flight ID format issues)
+                        const ticketData = await bookingService.generateTicket(id);
+                        setTicket(ticketData);
+                    } catch (ticketError) {
+                        console.error('Error generating ticket from API:', ticketError);
+
+                        // If ticket generation fails, try to get the flight and generate ticket locally
+                        try {
+                            // Extract flightId from booking
+                            const flightId = typeof bookingData.flight === 'string'
+                                ? bookingData.flight
+                                : bookingData.flight._id;
+
+                            // Get flight details
+                            const flightData = await flightService.getFlightById(flightId);
+                            setFlight(flightData);
+
+                            if (flightData) {
+                                // Generate ticket data locally
+                                const localTicketData = {
+                                    bookingId: bookingData._id,
+                                    pnr: bookingData.pnr,
+                                    airline: flightData.airline,
+                                    flightNumber: flightData.flightNumber,
+                                    departureCity: flightData.departureCity,
+                                    departureAirport: flightData.departureAirport,
+                                    departureCode: flightData.departureCode,
+                                    departureTime: flightData.departureTime,
+                                    arrivalCity: flightData.arrivalCity,
+                                    arrivalAirport: flightData.arrivalAirport,
+                                    arrivalCode: flightData.arrivalCode,
+                                    arrivalTime: flightData.arrivalTime,
+                                    duration: flightData.duration,
+                                    aircraft: flightData.aircraft,
+                                    bookingDate: bookingData.bookingDate,
+                                    totalAmount: bookingData.totalAmount,
+                                    passengers: bookingData.passengers.map((passenger, index) => ({
+                                        ...passenger,
+                                        seat: bookingData.seatNumbers[index] || "Not assigned"
+                                    }))
+                                };
+                                setTicket(localTicketData);
+                            } else {
+                                throw new Error("Could not load flight details");
+                            }
+                        } catch (flightError) {
+                            console.error('Error fetching flight details:', flightError);
+                            throw new Error("Could not load ticket information");
+                        }
+                    }
+                }
             } catch (error: any) {
                 console.error('Error fetching booking:', error);
                 setError(error.message || 'Unable to load booking information. Please try again.');
@@ -56,7 +141,7 @@ const BookingConfirmation: React.FC = () => {
         };
 
         fetchBookingData();
-    }, [id, refreshWallet]);
+    }, [id, refreshWallet, selectedFlight]);
 
     // Handle PDF ticket download
     const handleDownloadTicket = async () => {

@@ -34,6 +34,15 @@ const FlightCard: React.FC<FlightCardProps> = ({
         ? new Date(flight.arrivalTime)
         : flight.arrivalTime;
 
+    // Handle selection and ensure the flight ID is correctly passed
+    const handleSelect = () => {
+        // Make sure we preserve the flight._id even if it's not a standard MongoDB ObjectId
+        onSelect({
+            ...flight,
+            _id: flight._id || flight.flightNumber // Fallback to flightNumber if _id is missing
+        });
+    };
+
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -166,7 +175,7 @@ const FlightCard: React.FC<FlightCardProps> = ({
 
 
                                 <Button
-                                    onClick={() => onSelect(flight)}
+                                    onClick={handleSelect}
                                     variant="primary"
                                     size="md"
                                 >

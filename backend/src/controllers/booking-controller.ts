@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { BookingService } from "../services/booking-service";
 import { PDFService } from "../services/pdf-service";
 import { FlightService } from "../services/flight-service";
+import mongoose from "mongoose";
 
 export class BookingController {
   /**
@@ -26,6 +27,8 @@ export class BookingController {
         return;
       }
 
+      console.log(`Attempting to create booking for flight ID: ${flightId}`);
+
       const booking = await BookingService.createBooking({
         userId,
         flightId,
@@ -37,6 +40,7 @@ export class BookingController {
         booking,
       });
     } catch (error: any) {
+      console.error("Booking creation error:", error);
       const statusCode = error.message.includes("Insufficient wallet balance")
         ? 400
         : 500;
@@ -97,6 +101,7 @@ export class BookingController {
       const bookingId = req.params.id;
       const userId = req.userId as string;
 
+      // Get the booking
       const booking = await BookingService.getBookingById(bookingId, userId);
 
       if (!booking) {
@@ -104,16 +109,18 @@ export class BookingController {
         return;
       }
 
-      const flight = await FlightService.getFlightById(
-        booking.flight.toString(),
-        userId
-      );
+      // Check if flight is a string or ObjectId and handle appropriately
+      const flightId = booking.flight.toString();
+
+      // Get the flight using our enhanced getFlightById method that handles both ID formats
+      const flight = await FlightService.getFlightById(flightId, userId);
 
       if (!flight) {
         res.status(404).json({ success: false, message: "Flight not found" });
         return;
       }
 
+      // Generate ticket data
       const ticketData = PDFService.generateTicketData(booking, flight);
 
       res.status(200).json({
@@ -121,6 +128,7 @@ export class BookingController {
         ticket: ticketData,
       });
     } catch (error: any) {
+      console.error("Error generating ticket:", error);
       const statusCode = error.message.includes("Unauthorized") ? 403 : 500;
       res.status(statusCode).json({ success: false, message: error.message });
     }

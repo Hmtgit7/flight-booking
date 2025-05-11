@@ -22,6 +22,10 @@ interface BookingContextType {
     loadBookings: (page?: number) => Promise<void>;
     cancelBooking: (bookingId: string) => Promise<boolean>;
     refreshBookings: () => Promise<void>;
+    // Save the selected flight to localStorage
+    persistSelectedFlight: () => void;
+    // Load the saved flight from localStorage
+    loadPersistedFlight: () => void;
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
@@ -37,6 +41,11 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [currentPage, setCurrentPage] = useState<number>(1);
     const [totalPages, setTotalPages] = useState<number>(1);
 
+    // Load saved flight when component mounts
+    useEffect(() => {
+        loadPersistedFlight();
+    }, []);
+
     const addPassenger = (passenger: Passenger) => {
         setPassengers((prevPassengers) => [...prevPassengers, passenger]);
     };
@@ -50,6 +59,8 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     const clearBooking = () => {
         setSelectedFlight(null);
         setPassengers([]);
+        // Clear saved flight from localStorage
+        localStorage.removeItem('selectedFlight');
     };
 
     const loadBookings = async (page: number = 1) => {
@@ -88,6 +99,36 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
         await loadBookings(currentPage);
     };
 
+    // Function to save selected flight to localStorage
+    const persistSelectedFlight = () => {
+        if (selectedFlight) {
+            try {
+                localStorage.setItem('selectedFlight', JSON.stringify(selectedFlight));
+            } catch (error) {
+                console.error('Error saving flight to localStorage:', error);
+            }
+        }
+    };
+
+    // Function to load the saved flight from localStorage
+    const loadPersistedFlight = () => {
+        try {
+            const savedFlight = localStorage.getItem('selectedFlight');
+            if (savedFlight) {
+                setSelectedFlight(JSON.parse(savedFlight));
+            }
+        } catch (error) {
+            console.error('Error loading flight from localStorage:', error);
+        }
+    };
+
+    // When selectedFlight changes, save it to localStorage
+    useEffect(() => {
+        if (selectedFlight) {
+            persistSelectedFlight();
+        }
+    }, [selectedFlight]);
+
     // Load bookings when authenticated and component mounts
     useEffect(() => {
         if (isAuthenticated) {
@@ -112,6 +153,8 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
         loadBookings,
         cancelBooking,
         refreshBookings,
+        persistSelectedFlight,
+        loadPersistedFlight,
     };
 
     return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>;

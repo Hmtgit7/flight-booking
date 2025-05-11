@@ -131,6 +131,40 @@ export const bookingService = {
   },
 
   /**
+   * Generate a ticket locally without API call
+   * This is a fallback function when the backend ticket generation fails
+   */
+  generateLocalTicket(booking: Booking, flight: Flight): TicketData {
+    try {
+      return {
+        bookingId: booking._id.toString(),
+        pnr: booking.pnr,
+        airline: flight.airline,
+        flightNumber: flight.flightNumber,
+        departureCity: flight.departureCity,
+        departureAirport: flight.departureAirport,
+        departureCode: flight.departureCode,
+        departureTime: flight.departureTime,
+        arrivalCity: flight.arrivalCity,
+        arrivalAirport: flight.arrivalAirport,
+        arrivalCode: flight.arrivalCode,
+        arrivalTime: flight.arrivalTime,
+        duration: flight.duration,
+        aircraft: flight.aircraft,
+        bookingDate: booking.bookingDate,
+        totalAmount: booking.totalAmount,
+        passengers: booking.passengers.map((passenger, index) => ({
+          ...passenger,
+          seat: booking.seatNumbers[index] || "Not assigned",
+        })),
+      };
+    } catch (error) {
+      console.error("Error generating local ticket:", error);
+      throw new Error("Failed to generate ticket information locally");
+    }
+  },
+
+  /**
    * Cancel a booking
    */
   async cancelBooking(id: string): Promise<Booking> {

@@ -46,6 +46,9 @@ const BookingForm = () => {
     // Update flightId when selectedFlight changes
     useEffect(() => {
         if (selectedFlight && selectedFlight._id) {
+            // Ensure we're using the correct format of ID
+            // If this ID is from a real database (MongoDB), use it as is
+            // Otherwise, if it's a mock ID like "flight_1", store it as is
             control._formValues.flightId = selectedFlight._id;
         }
     }, [selectedFlight, control._formValues]);
@@ -76,6 +79,8 @@ const BookingForm = () => {
             if ((wallet?.balance || 0) < totalPrice) {
                 throw new Error('Insufficient wallet balance for this booking');
             }
+
+            console.log("Submitting booking with data:", data);
 
             // Create booking
             const booking = await bookingService.createBooking(data);
