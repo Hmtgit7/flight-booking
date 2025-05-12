@@ -18,7 +18,7 @@ import Modal from '../ui/Modal';
 
 type BookingFormValues = z.infer<typeof bookingSchema>;
 
-const BookingForm = () => {
+const BookingForm: React.FC = () => {
     const { selectedFlight } = useBooking();
     const { wallet, refreshWallet } = useAuth();
     const navigate = useNavigate();
@@ -30,6 +30,7 @@ const BookingForm = () => {
         control,
         handleSubmit,
         formState: { errors },
+        reset
     } = useForm<BookingFormValues>({
         resolver: zodResolver(bookingSchema),
         defaultValues: {
@@ -43,15 +44,15 @@ const BookingForm = () => {
         name: 'passengers',
     });
 
-    // Update flightId when selectedFlight changes
+    // Update form when selectedFlight changes
     useEffect(() => {
         if (selectedFlight && selectedFlight._id) {
-            // Ensure we're using the correct format of ID
-            // If this ID is from a real database (MongoDB), use it as is
-            // Otherwise, if it's a mock ID like "flight_1", store it as is
-            control._formValues.flightId = selectedFlight._id;
+            reset({
+                flightId: selectedFlight._id,
+                passengers: [{ name: '', age: 30, gender: 'male' }],
+            });
         }
-    }, [selectedFlight, control._formValues]);
+    }, [selectedFlight, reset]);
 
     // Make sure we have the latest wallet data
     useEffect(() => {
@@ -65,7 +66,10 @@ const BookingForm = () => {
     };
 
     const onSubmit = async (data: BookingFormValues) => {
-        if (!selectedFlight) return;
+        if (!selectedFlight) {
+            navigate('/search');
+            return;
+        }
 
         setIsSubmitting(true);
         setBookingError('');
@@ -80,10 +84,18 @@ const BookingForm = () => {
                 throw new Error('Insufficient wallet balance for this booking');
             }
 
-            console.log("Submitting booking with data:", data);
+            console.log("Submitting booking with data:", {
+                ...data,
+                flightId: selectedFlight._id // Make sure we're using the right ID
+            });
 
-            // Create booking
-            const booking = await bookingService.createBooking(data);
+            // Create booking with the correct flight ID
+            const booking = await bookingService.createBooking({
+                ...data,
+                flightId: selectedFlight._id
+            });
+
+            console.log("Booking created successfully:", booking);
 
             // Refresh wallet to reflect the new balance
             await refreshWallet();
@@ -159,6 +171,11 @@ const BookingForm = () => {
                             <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Price per passenger</p>
                             <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
                                 {formatCurrency(selectedFlight.currentPrice)}
+                                {selectedFlight.priceIncreased && (
+                                    <span className="ml-2 text-xs text-red-600 dark:text-red-400">
+                                        (+10% dynamic pricing)
+                                    </span>
+                                )}
                             </p>
                         </div>
                     </div>
@@ -204,7 +221,7 @@ const BookingForm = () => {
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                     <Controller
                                         name={`passengers.${index}.name`}
                                         control={control}
@@ -268,6 +285,7 @@ const BookingForm = () => {
                                     {formatCurrency(walletBalance)}
                                 </p>
                                 <button
+                                    type="button"
                                     onClick={() => refreshWallet()}
                                     className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 mt-1"
                                 >
@@ -313,6 +331,20 @@ const BookingForm = () => {
                                 </div>
                             </div>
                         )}
+
+                        {/* Fare breakdown */}
+                        <div className="mt-6 space-y-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-500 dark:text-gray-400">Base Fare ({fields.length} × {formatCurrency(selectedFlight.currentPrice)})</span>
+                                <span className="font-medium text-gray-900 dark:text-white">{formatCurrency(totalPrice)}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-500 dark:text-gray-400">Remaining Balance</span>
+                                <span className={`font-medium ${walletBalance - totalPrice < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+                                    {formatCurrency(walletBalance - totalPrice)}
+                                </span>
+                            </div>
+                        </div>
                     </CardContent>
                     <CardFooter>
                         <div className="flex w-full justify-end space-x-4">

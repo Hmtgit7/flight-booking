@@ -13,22 +13,45 @@ interface FlightSearchCriteria {
 
 export class FlightService {
   /**
-   * Search flights based on criteria
+   * Search flights based on criteria - creates flights if none exist
    */
   static async searchFlights(
     criteria: FlightSearchCriteria,
     userId: string
-  ): Promise<IFlight[]> {
+  ): Promise<any[]> {
     try {
       const { departureCity, arrivalCity, departureDate } = criteria;
 
       // Basic filter object
       const filter: any = {};
 
-      if (departureCity)
-        filter.departureCity = { $regex: departureCity, $options: "i" };
-      if (arrivalCity)
-        filter.arrivalCity = { $regex: arrivalCity, $options: "i" };
+      // Extract city names and codes from the input format "City (CODE)"
+      let depCityName = departureCity;
+      let depCode = "";
+      let arrCityName = arrivalCity;
+      let arrCode = "";
+
+      if (departureCity) {
+        const depMatch = departureCity.match(/^([^(]+)(?:\s*\(([^)]+)\))?/);
+        depCityName = depMatch ? depMatch[1].trim() : departureCity;
+        depCode = depMatch && depMatch[2] ? depMatch[2].trim() : "";
+
+        filter.departureCity = depCityName;
+        if (depCode) {
+          filter.departureCode = depCode;
+        }
+      }
+
+      if (arrivalCity) {
+        const arrMatch = arrivalCity.match(/^([^(]+)(?:\s*\(([^)]+)\))?/);
+        arrCityName = arrMatch ? arrMatch[1].trim() : arrivalCity;
+        arrCode = arrMatch && arrMatch[2] ? arrMatch[2].trim() : "";
+
+        filter.arrivalCity = arrCityName;
+        if (arrCode) {
+          filter.arrivalCode = arrCode;
+        }
+      }
 
       if (departureDate) {
         const startDate = new Date(departureDate);
@@ -40,12 +63,29 @@ export class FlightService {
         filter.departureTime = { $gte: startDate, $lte: endDate };
       }
 
-      // Find flights matching criteria
-      const flights = await Flight.find(filter).limit(10);
+      console.log("Searching for flights with filter:", filter);
+
+      // Find existing flights
+      let flights = await Flight.find(filter).limit(10);
+
+      // If no flights found, create them dynamically
+      if (flights.length === 0 && depCityName && arrCityName) {
+        console.log(
+          `No flights found for ${depCityName} to ${arrCityName}, creating them...`
+        );
+
+        // Create flights for this route
+        flights = await this.createFlightsForRoute(
+          depCityName,
+          depCode || depCityName.substring(0, 3).toUpperCase(),
+          arrCityName,
+          arrCode || arrCityName.substring(0, 3).toUpperCase(),
+          departureDate || new Date()
+        );
+      }
 
       // Update prices based on dynamic pricing
       for (const flight of flights) {
-        // Ensure flight._id is properly typed
         if (flight._id) {
           const flightId = flight._id.toString();
           const currentPrice = await PricingService.getCurrentPrice(
@@ -65,38 +105,112 @@ export class FlightService {
   }
 
   /**
+   * Create flights for a specific route dynamically
+   */
+  static async createFlightsForRoute(
+    departureCity: string,
+    departureCode: string,
+    arrivalCity: string,
+    arrivalCode: string,
+    departureDate: Date
+  ): Promise<any[]> {
+    const airlines = ["IndiGo", "SpiceJet", "Air India", "Vistara", "Go First"];
+    const aircraft = [
+      "Airbus A320",
+      "Boeing 737",
+      "Airbus A321",
+      "Boeing 777",
+      "Airbus A319",
+    ];
+
+    const flights = [];
+    const baseDate = new Date(departureDate);
+
+    // Create 5-8 flights for this route
+    const flightCount = 5 + Math.floor(Math.random() * 4);
+
+    for (let i = 0; i < flightCount; i++) {
+      const airline = airlines[Math.floor(Math.random() * airlines.length)];
+      const flightNumber = `${airline.substring(0, 2)}${Math.floor(
+        1000 + Math.random() * 9000
+      )}`;
+
+      // Distribute flights throughout the day
+      const departureTime = new Date(baseDate);
+      departureTime.setHours(
+        6 + Math.floor(i * (18 / flightCount)),
+        Math.floor(Math.random() * 60),
+        0,
+        0
+      );
+
+      // Flight duration between 1-4 hours
+      const duration = 60 + Math.floor(Math.random() * 180);
+      const arrivalTime = new Date(departureTime);
+      arrivalTime.setMinutes(arrivalTime.getMinutes() + duration);
+
+      // Base price between Rs 2,000 - Rs 8,000
+      const basePrice = 2000 + Math.floor(Math.random() * 6000);
+
+      const flight = new Flight({
+        flightNumber,
+        airline,
+        departureCity,
+        departureAirport: `${departureCity} International Airport`,
+        departureCode,
+        arrivalCity,
+        arrivalAirport: `${arrivalCity} International Airport`,
+        arrivalCode,
+        departureTime,
+        arrivalTime,
+        duration,
+        basePrice,
+        currentPrice: basePrice,
+        seatsAvailable: 50 + Math.floor(Math.random() * 100),
+        aircraft: aircraft[Math.floor(Math.random() * aircraft.length)],
+      });
+
+      const savedFlight = await flight.save();
+      flights.push(savedFlight);
+    }
+
+    console.log(
+      `Created ${flights.length} flights for ${departureCity} to ${arrivalCity}`
+    );
+    return flights;
+  }
+
+  /**
    * Get flight details by ID
    */
-  static async getFlightById(
-    flightId: string,
-    userId: string
-  ): Promise<IFlight | null> {
+  static async getFlightById(flightId: string, userId: string): Promise<any> {
     try {
       let flight;
 
-      // Handle both MongoDB ObjectId and custom ID formats like "flight_1"
+      // First try to find by MongoDB ObjectId
       if (mongoose.Types.ObjectId.isValid(flightId)) {
         flight = await Flight.findById(flightId);
-      } else {
-        // Try to find by flightNumber if flightId is not a valid ObjectId
-        const flightIdParts = flightId.split("_");
-        const flightNumber =
-          flightIdParts.length > 1 ? flightIdParts[1] : flightId;
-
-        flight = await Flight.findOne({
-          $or: [
-            { flightNumber: flightNumber },
-            { flightNumber: `flight_${flightNumber}` },
-          ],
-        });
-
-        // If still not found and it's our test case, return the first flight
-        if (!flight && flightId === "flight_1") {
-          flight = await Flight.findOne();
-        }
       }
 
-      if (!flight) return null;
+      // If not found, try to find by flightNumber
+      if (!flight) {
+        // Handle IDs like "flight_1", "flight_2", etc.
+        if (flightId.startsWith("flight_")) {
+          // These are mock IDs from the frontend - we should not use them
+          console.log(
+            `Mock flight ID detected: ${flightId}. Please use real flight IDs from the database.`
+          );
+          return null;
+        }
+
+        // Try exact flightNumber match
+        flight = await Flight.findOne({ flightNumber: flightId });
+      }
+
+      if (!flight) {
+        console.log(`Flight not found for ID: ${flightId}`);
+        return null;
+      }
 
       // Apply dynamic pricing
       const currentPrice = await PricingService.getCurrentPrice(
@@ -114,124 +228,34 @@ export class FlightService {
   }
 
   /**
+   * Delete all flights (for testing purposes)
+   */
+  static async deleteAllFlights(): Promise<void> {
+    try {
+      await Flight.deleteMany({});
+      console.log("All flights deleted");
+    } catch (error) {
+      console.error("Error deleting flights:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Seed initial flight data
    */
   static async seedFlights(): Promise<void> {
     try {
       const flightCount = await Flight.countDocuments();
-      if (flightCount > 0) return; // Skip if already seeded
-
-      const airlines = [
-        "IndiGo",
-        "SpiceJet",
-        "Air India",
-        "Vistara",
-        "Go First",
-      ];
-      const cities = [
-        {
-          city: "Delhi",
-          airport: "Indira Gandhi International Airport",
-          code: "DEL",
-        },
-        {
-          city: "Mumbai",
-          airport: "Chhatrapati Shivaji Maharaj International Airport",
-          code: "BOM",
-        },
-        {
-          city: "Bangalore",
-          airport: "Kempegowda International Airport",
-          code: "BLR",
-        },
-        {
-          city: "Chennai",
-          airport: "Chennai International Airport",
-          code: "MAA",
-        },
-        {
-          city: "Kolkata",
-          airport: "Netaji Subhas Chandra Bose International Airport",
-          code: "CCU",
-        },
-        {
-          city: "Hyderabad",
-          airport: "Rajiv Gandhi International Airport",
-          code: "HYD",
-        },
-      ];
-
-      const aircraft = [
-        "Airbus A320",
-        "Boeing 737",
-        "Airbus A321",
-        "Boeing 777",
-        "Airbus A319",
-      ];
-
-      const flights = [];
-
-      // Generate random flights
-      for (let i = 0; i < 20; i++) {
-        const departureIndex = Math.floor(Math.random() * cities.length);
-        let arrivalIndex;
-        do {
-          arrivalIndex = Math.floor(Math.random() * cities.length);
-        } while (arrivalIndex === departureIndex);
-
-        const airline = airlines[Math.floor(Math.random() * airlines.length)];
-        // For the special test case "flight_1", we add a flight with this exact ID
-        // This ensures our frontend demo works correctly with the mock data
-        const flightNumber =
-          i === 0
-            ? "flight_1"
-            : `${airline.substring(0, 2)}${Math.floor(
-                1000 + Math.random() * 9000
-              )}`;
-
-        // Generate random departure times for the next 7 days
-        const departureDate = new Date();
-        departureDate.setDate(
-          departureDate.getDate() + Math.floor(Math.random() * 7)
+      if (flightCount > 0) {
+        console.log(
+          `Database already has ${flightCount} flights. Skipping seed.`
         );
-        departureDate.setHours(
-          Math.floor(Math.random() * 24),
-          Math.floor(Math.random() * 12) * 5,
-          0,
-          0
-        );
-
-        // Duration between 1-4 hours
-        const durationMinutes = 60 + Math.floor(Math.random() * 180);
-
-        // Calculate arrival time
-        const arrivalDate = new Date(departureDate);
-        arrivalDate.setMinutes(arrivalDate.getMinutes() + durationMinutes);
-
-        // Base price between Rs 2,000 - Rs 3,000
-        const basePrice = 2000 + Math.floor(Math.random() * 1000);
-
-        flights.push({
-          flightNumber,
-          airline,
-          departureCity: cities[departureIndex].city,
-          departureAirport: cities[departureIndex].airport,
-          departureCode: cities[departureIndex].code,
-          arrivalCity: cities[arrivalIndex].city,
-          arrivalAirport: cities[arrivalIndex].airport,
-          arrivalCode: cities[arrivalIndex].code,
-          departureTime: departureDate,
-          arrivalTime: arrivalDate,
-          duration: durationMinutes,
-          basePrice,
-          currentPrice: basePrice,
-          seatsAvailable: 30 + Math.floor(Math.random() * 70),
-          aircraft: aircraft[Math.floor(Math.random() * aircraft.length)],
-        });
+        return;
       }
 
-      await Flight.insertMany(flights);
-      console.log("Flights seeded successfully");
+      console.log(
+        "No flights found in database. Flights will be created dynamically when users search."
+      );
     } catch (error) {
       console.error("Error seeding flights:", error);
       throw error;

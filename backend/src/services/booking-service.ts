@@ -1,6 +1,7 @@
 // backend/src/services/booking-service.ts
 import { Booking, IBooking } from "../models/booking-model";
 import { Flight } from "../models/flight-model";
+import { FlightService } from "../services/flight-service";
 import { WalletService } from "./wallet-service";
 import { PricingService } from "./pricing-service";
 import mongoose from "mongoose";
@@ -57,33 +58,27 @@ export class BookingService {
     try {
       const { userId, flightId, passengers } = bookingData;
 
-      let flight;
-      // Check if flightId is a valid MongoDB ObjectId
-      if (mongoose.Types.ObjectId.isValid(flightId)) {
-        // If it's a valid ObjectId, find by that ID
-        flight = await Flight.findById(flightId);
-      } else {
-        // If it's not a valid ObjectId (e.g., "flight_1"), find by flightNumber or another field
-        const flightIdParts = flightId.split("_");
-        const flightNumber =
-          flightIdParts.length > 1 ? flightIdParts[1] : flightId;
+      console.log(`Looking for flight with ID: ${flightId}`);
 
-        flight = await Flight.findOne({
-          $or: [
-            { flightNumber: flightNumber },
-            { flightNumber: `flight_${flightNumber}` },
-          ],
-        });
-
-        // If still not found, try to find the first flight (for demo purposes)
-        if (!flight && flightId === "flight_1") {
-          flight = await Flight.findOne();
-        }
-      }
+      // Use FlightService to find the flight, which handles different ID formats
+      const flight = await FlightService.getFlightById(flightId, userId);
 
       if (!flight) {
+        // As a last resort, create a new flight if it's a mock ID
+        if (flightId.startsWith("flight_") && flightId !== "flight_1") {
+          console.log(
+            `Flight ${flightId} not found, this might be a frontend mock flight`
+          );
+          throw new Error(
+            `Flight not found for ID: ${flightId}. Please search for flights again to get real flight data.`
+          );
+        }
         throw new Error(`Flight not found for ID: ${flightId}`);
       }
+
+      console.log(
+        `Found flight: ${flight.flightNumber} - ${flight.departureCity} to ${flight.arrivalCity}`
+      );
 
       // Validate seats availability
       if (flight.seatsAvailable < passengers.length) {
@@ -136,6 +131,10 @@ export class BookingService {
       await flight.save({ session });
 
       await session.commitTransaction();
+
+      // Populate the flight data in the booking before returning
+      await booking.populate("flight");
+
       return booking;
     } catch (error) {
       await session.abortTransaction();
@@ -166,6 +165,7 @@ export class BookingService {
 
       const bookings = await Booking.find({ user: userId })
         .populate("flight")
+        .populate("user", "name email")
         .sort({ bookingDate: -1 })
         .skip(skip)
         .limit(limit);
@@ -190,10 +190,16 @@ export class BookingService {
     userId: string
   ): Promise<IBooking | null> {
     try {
-      const booking = await Booking.findById(bookingId).populate("flight");
+      const booking = await Booking.findById(bookingId)
+        .populate("flight")
+        .populate("user", "name email");
 
       // Security check: ensure the booking belongs to the requesting user
-      if (booking && booking.user.toString() !== userId) {
+      if (
+        booking &&
+        booking.user.toString() !== userId &&
+        (booking.user as any)._id?.toString() !== userId
+      ) {
         throw new Error("Unauthorized access to booking");
       }
 
@@ -216,13 +222,21 @@ export class BookingService {
 
     try {
       // Find booking and validate user ownership
-      const booking = await Booking.findById(bookingId).session(session);
+      const booking = await Booking.findById(bookingId)
+        .populate("flight")
+        .session(session);
 
       if (!booking) {
         throw new Error("Booking not found");
       }
 
-      if (booking.user.toString() !== userId) {
+      // Check ownership - handle both string and populated user
+      const bookingUserId =
+        typeof booking.user === "string"
+          ? booking.user
+          : (booking.user as any)._id?.toString();
+
+      if (bookingUserId !== userId) {
         throw new Error("Unauthorized access to booking");
       }
 
@@ -271,24 +285,51 @@ export class BookingService {
   static async getUserBookingStats(userId: string): Promise<any> {
     try {
       const totalBookings = await Booking.countDocuments({ user: userId });
-      const upcomingBookings = await Booking.countDocuments({
-        user: userId,
-        status: "confirmed",
-        "flight.departureTime": { $gt: new Date() },
-      });
+
+      // Upcoming bookings - flights where departure time is in the future
+      const upcomingBookings = await Booking.aggregate([
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(userId),
+            status: "confirmed",
+          },
+        },
+        {
+          $lookup: {
+            from: "flights",
+            localField: "flight",
+            foreignField: "_id",
+            as: "flightData",
+          },
+        },
+        {
+          $match: {
+            "flightData.departureTime": { $gt: new Date() },
+          },
+        },
+        {
+          $count: "count",
+        },
+      ]);
+
       const cancelledBookings = await Booking.countDocuments({
         user: userId,
         status: "cancelled",
       });
 
       const totalSpent = await Booking.aggregate([
-        { $match: { user: new mongoose.Types.ObjectId(userId) } },
+        {
+          $match: {
+            user: new mongoose.Types.ObjectId(userId),
+            status: "confirmed",
+          },
+        },
         { $group: { _id: null, total: { $sum: "$totalAmount" } } },
       ]);
 
       return {
         totalBookings,
-        upcomingBookings,
+        upcomingBookings: upcomingBookings[0]?.count || 0,
         cancelledBookings,
         totalSpent: totalSpent.length > 0 ? totalSpent[0].total : 0,
       };

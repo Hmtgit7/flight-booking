@@ -27,19 +27,19 @@ const FlightSchema: Schema = new Schema(
     flightNumber: {
       type: String,
       required: true,
-      // Add index to improve lookups by flightNumber
+      unique: true, // Ensure unique flight numbers
       index: true,
     },
     airline: { type: String, required: true },
-    departureCity: { type: String, required: true },
+    departureCity: { type: String, required: true, index: true },
     departureAirport: { type: String, required: true },
-    departureCode: { type: String, required: true },
-    arrivalCity: { type: String, required: true },
+    departureCode: { type: String, required: true, index: true },
+    arrivalCity: { type: String, required: true, index: true },
     arrivalAirport: { type: String, required: true },
-    arrivalCode: { type: String, required: true },
-    departureTime: { type: Date, required: true },
+    arrivalCode: { type: String, required: true, index: true },
+    departureTime: { type: Date, required: true, index: true },
     arrivalTime: { type: Date, required: true },
-    duration: { type: Number, required: true }, // in minutes
+    duration: { type: Number, required: true },
     basePrice: { type: Number, required: true },
     currentPrice: { type: Number, required: true },
     searchCount: { type: Number, default: 0 },
@@ -50,13 +50,8 @@ const FlightSchema: Schema = new Schema(
   { timestamps: true }
 );
 
-// Add a pre-save hook to handle special case for flightNumber "flight_1"
-FlightSchema.pre<IFlight>("save", async function (next) {
-  // If this is a new flight with flightNumber "flight_1"
-  if (this.isNew && this.flightNumber === "flight_1") {
-    console.log("Special case: Saving flight with flightNumber 'flight_1'");
-  }
-  next();
-});
+// Create compound index for efficient route searches
+FlightSchema.index({ departureCity: 1, arrivalCity: 1, departureTime: 1 });
+FlightSchema.index({ departureCode: 1, arrivalCode: 1, departureTime: 1 });
 
 export const Flight = mongoose.model<IFlight>("Flight", FlightSchema);

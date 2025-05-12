@@ -17,6 +17,14 @@ export class FlightController {
       } = req.query;
       const userId = req.userId as string;
 
+      console.log("Received search request with criteria:", {
+        departureCity,
+        arrivalCity,
+        departureDate,
+        returnDate,
+        passengers,
+      });
+
       const searchCriteria = {
         departureCity: departureCity as string,
         arrivalCity: arrivalCity as string,
@@ -34,6 +42,7 @@ export class FlightController {
         flights,
       });
     } catch (error: any) {
+      console.error("Error in searchFlights controller:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   }
@@ -45,6 +54,8 @@ export class FlightController {
     try {
       const flightId = req.params.id;
       const userId = req.userId as string;
+
+      console.log(`Getting flight by ID: ${flightId}`);
 
       const flight = await FlightService.getFlightById(flightId, userId);
 
@@ -58,6 +69,7 @@ export class FlightController {
         flight,
       });
     } catch (error: any) {
+      console.error("Error in getFlightById controller:", error);
       res.status(500).json({ success: false, message: error.message });
     }
   }
