@@ -28,14 +28,17 @@ const BookingConfirmation: React.FC = () => {
     const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [showErrorModal, setShowErrorModal] = useState<boolean>(false);
+    const [dataLoaded, setDataLoaded] = useState<boolean>(false); // Add flag to prevent re-fetching
 
-    // Fetch booking data
+    // Fetch booking data - only once
     useEffect(() => {
         const fetchBookingData = async () => {
-            if (!id) {
-                setError("Missing booking ID");
-                setShowErrorModal(true);
-                setLoading(false);
+            if (!id || dataLoaded) {
+                if (!id) {
+                    setError("Missing booking ID");
+                    setShowErrorModal(true);
+                    setLoading(false);
+                }
                 return;
             }
 
@@ -95,6 +98,9 @@ const BookingConfirmation: React.FC = () => {
 
                 // Clear the booking context after successful confirmation
                 clearBooking();
+
+                // Mark data as loaded to prevent re-fetching
+                setDataLoaded(true);
             } catch (error: any) {
                 console.error('Error fetching booking:', error);
                 setError(error.message || 'Unable to load booking information. Please try again.');
@@ -105,7 +111,7 @@ const BookingConfirmation: React.FC = () => {
         };
 
         fetchBookingData();
-    }, [id, refreshWallet, clearBooking]);
+    }, [id]); // Remove dependencies that could cause re-fetching
 
     // Handle PDF ticket download
     const handleDownloadTicket = async () => {
